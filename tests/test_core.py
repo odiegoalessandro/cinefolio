@@ -9,6 +9,7 @@ from server.repositories.user_movie_repository import UserMovieRepository
 from server.repositories.user_repository import UserRepository
 from server.services.auth_service import AuthService, hash_password, verify_password
 from server.services.profile_service import ProfileService
+from server.router import movie_profile_payload, profile_payload
 
 class DatabaseTestCase(unittest.TestCase):
     def setUp(self):
@@ -50,5 +51,16 @@ class AuthTestCase(DatabaseTestCase):
         auth=AuthService(self.users)
         with self.assertRaises(ValueError): auth.register('x','Nome','123')
         with self.assertRaises(ValueError): auth.login('missing','senha')
+
+class RouterValidationTests(unittest.TestCase):
+    def test_profile_payload_rejects_invalid_values(self):
+        with self.assertRaises(ValueError): profile_payload({'display_name': '', 'bio': ''})
+        with self.assertRaises(ValueError): profile_payload({'display_name': 'Nome', 'bio': 'x' * 501})
+        with self.assertRaises(ValueError): profile_payload({'display_name': ['Nome']})
+
+    def test_movie_payload_requires_status_and_known_fields(self):
+        with self.assertRaises(ValueError): movie_profile_payload({'rating': 8})
+        with self.assertRaises(ValueError): movie_profile_payload({'status': 'WATCHED', 'extra': True})
+        self.assertEqual(movie_profile_payload({'status': 'WATCHED', 'favorite': True}), {'status': 'WATCHED', 'favorite': True})
 
 if __name__ == '__main__': unittest.main()

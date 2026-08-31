@@ -22,9 +22,37 @@ def json_response(handler, status, body, headers=None):
 
 def read_json(handler):
     size = int(handler.headers.get("Content-Length", "0"))
-    if size > 20_000: raise ValueError("Payload muito grande.")
-    try: return json.loads(handler.rfile.read(size).decode("utf-8")) if size else {}
-    except json.JSONDecodeError as error: raise ValueError("JSON inválido.") from error
+    if size > 20_000:
+        raise ValueError("Payload muito grande.")
+    try:
+        payload = json.loads(handler.rfile.read(size).decode("utf-8")) if size else {}
+    except json.JSONDecodeError as error:
+        raise ValueError("JSON inválido.") from error
+    if not isinstance(payload, dict):
+        raise ValueError("JSON deve ser um objeto.")
+    return payload
+
+
+def profile_payload(data):
+    values = {key: data.get(key, "") for key in ("display_name", "bio", "avatar_url", "banner_url")}
+    if not all(isinstance(value, str) for value in values.values()):
+        raise ValueError("Dados de perfil inválidos.")
+    display_name = values["display_name"].strip()
+    bio = values["bio"].strip()
+    avatar_url = values["avatar_url"].strip()
+    banner_url = values["banner_url"].strip()
+    if not 1 <= len(display_name) <= 80:
+        raise ValueError("Nome de exibição inválido.")
+    if len(bio) > 500:
+        raise ValueError("Bio deve ter no máximo 500 caracteres.")
+    return display_name, bio, avatar_url, banner_url
+
+
+def movie_profile_payload(data):
+    allowed = {"status", "rating", "review", "favorite", "watched_at"}
+    if set(data) - allowed or "status" not in data:
+        raise ValueError("Dados de filme inválidos.")
+    return {key: data.get(key) for key in allowed if key in data}
 
 class Router:
     def __init__(self, connection):
@@ -59,12 +87,12 @@ class Router:
                     if not user: return json_response(handler,401,{"error":"Autenticação necessária."})
                     movie=self.movies.upsert(self.tmdb.details(tmdb_id))
                     if handler.command=="DELETE": return json_response(handler,200,{"removed":self.user_movies.remove(user["id"],movie["id"])})
-                    payload=read_json(handler); self.user_movies.upsert(user["id"],movie["id"],**payload); return json_response(handler,200,{"ok":True})
+                    payload=movie_profile_payload(read_json(handler)); self.user_movies.upsert(user["id"],movie["id"],**payload); return json_response(handler,200,{"ok":True})
             if path.startswith("/api/profiles/") and handler.command == "GET":
                 profile=self.profiles.public_profile(path.rsplit("/",1)[1]); return json_response(handler,200,{"profile":profile}) if profile else json_response(handler,404,{"error":"Perfil não encontrado."})
             if path == "/api/profile" and handler.command == "PUT":
                 if not user:return json_response(handler,401,{"error":"Autenticação necessária."})
-                data=read_json(handler); updated=self.profiles.users.update_profile(user["id"],data.get("display_name","").strip(),data.get("bio","").strip(),data.get("avatar_url","").strip(),data.get("banner_url","").strip()); return json_response(handler,200,{"user":self.safe_user(updated)})
+                data=read_json(handler); updated=self.profiles.users.update_profile(user["id"], *profile_payload(data)); return json_response(handler,200,{"user":self.safe_user(updated)})
             if path == "/api/account" and handler.command == "DELETE":
                 if not user:return json_response(handler,401,{"error":"Autenticação necessária."})
                 self.profiles.users.delete(user["id"]); return json_response(handler,200,{"ok":True},{"Set-Cookie":"session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0"})
