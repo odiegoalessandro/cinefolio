@@ -9,7 +9,7 @@ BASE_URL = "https://api.themoviedb.org/3"
 
 class TmdbService:
     def __init__(self, token=None, opener=urlopen):
-        self.token = token or os.environ.get("TMDB_BEARER_TOKEN", "")
+        self.token = token if token is not None else os.environ.get("TMDB_BEARER_TOKEN", "")
         self.opener = opener
 
     def _request(self, path, params=None):
