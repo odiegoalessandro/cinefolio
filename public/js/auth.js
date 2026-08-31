@@ -1,0 +1,3 @@
+document.querySelector('#login-form')?.addEventListener('submit', async event => { event.preventDefault(); const form = Object.fromEntries(new FormData(event.target)); try { await Api.post('/api/auth/login', form); location.href = '/index.html'; } catch (error) { showMessage(error.message); } });
+document.querySelector('#register-form')?.addEventListener('submit', async event => { event.preventDefault(); const form = Object.fromEntries(new FormData(event.target)); try { await Api.post('/api/auth/register', form); location.href = '/login.html'; } catch (error) { showMessage(error.message); } });
+function showMessage(message) { document.querySelector('.form-message').textContent = message; }
