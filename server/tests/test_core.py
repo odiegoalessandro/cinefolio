@@ -34,10 +34,12 @@ class DatabaseTestCase(unittest.TestCase):
         with self.assertRaises(Exception): self.user_movies.upsert(user['id'],movie['id'],'INVALID')
     def test_profile_groups_movies(self):
         user=self.user(); watched=self.movie(1); watching=self.movie(2)
-        self.user_movies.upsert(user['id'], watched['id'], 'WATCHED', favorite=True, watched_at='2026-01-01')
+        self.user_movies.upsert(user['id'], watched['id'], 'WATCHED', rating=9, review='Um clássico.', favorite=True, watched_at='2026-01-01')
         self.user_movies.upsert(user['id'], watching['id'], 'WATCHING')
         profile=ProfileService(self.users,self.user_movies).public_profile('diego')
-        self.assertEqual(len(profile['sections']['favorites']),1); self.assertEqual(len(profile['sections']['watching']),1); self.assertNotIn('password_hash',profile)
+        favorite=profile['sections']['favorites'][0]
+        self.assertEqual(len(profile['sections']['favorites']),1); self.assertEqual(len(profile['sections']['watching']),1)
+        self.assertEqual(favorite['rating'], 9); self.assertEqual(favorite['review'], 'Um clássico.'); self.assertNotIn('password_hash',profile)
 
 class AuthTestCase(DatabaseTestCase):
     def test_hash_uses_salt_and_verifies(self):
