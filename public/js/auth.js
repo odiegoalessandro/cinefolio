@@ -1,8 +1,11 @@
+import { api } from './api.js';
+import { navigateTo } from './navigation.js';
+
 /**
  * Cinefolio - Gerenciador de Autenticação (Login e Cadastro)
  */
 
-document.addEventListener('DOMContentLoaded', () => {
+function initializeAuthPage() {
   const loginForm = document.querySelector('#login-form');
   const registerForm = document.querySelector('#register-form');
   const formMessage = document.querySelector('.form-message');
@@ -37,11 +40,11 @@ document.addEventListener('DOMContentLoaded', () => {
           submitBtn.textContent = 'Entrando...';
         }
 
-        await Api.post('/api/auth/login', payload);
+        await api.post('/api/auth/login', payload);
         showMessage('Login realizado com sucesso! Redirecionando...', false);
 
         setTimeout(() => {
-          App.go('index.html');
+          navigateTo('index.html');
         }, 500);
       } catch (error) {
         showMessage(error.message, true);
@@ -77,11 +80,11 @@ document.addEventListener('DOMContentLoaded', () => {
           submitBtn.textContent = 'Cadastrando...';
         }
 
-        await Api.post('/api/auth/register', payload);
+        await api.post('/api/auth/register', payload);
         showMessage('Conta criada com sucesso! Redirecionando para o login...', false);
 
         setTimeout(() => {
-          App.go('login.html');
+          navigateTo('login.html');
         }, 1000);
       } catch (error) {
         showMessage(error.message, true);
@@ -92,4 +95,6 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   }
-});
+}
+
+document.addEventListener('DOMContentLoaded', initializeAuthPage);

@@ -1,8 +1,14 @@
+import { api } from './api.js';
+import { escapeHtml } from './html-escaping.js';
+import { movieImageUrl } from './images.js';
+import { initializeNavigation } from './nav.js';
+import { createPageUrl } from './navigation.js';
+
 /**
  * Cinefolio - Busca e Exibição de Filmes do Catálogo
  */
 
-document.addEventListener('DOMContentLoaded', () => {
+function initializeSearchPage() {
   const grid = document.querySelector('#movie-results');
   const searchForm = document.querySelector('#search-form');
   const sectionTitle = document.querySelector('#section-title');
@@ -28,8 +34,8 @@ document.addEventListener('DOMContentLoaded', () => {
       .map((movie) => {
         const title = escapeHtml(movie.title);
         const year = escapeHtml(movie.release_year || 'Ano n/d');
-        const posterUrl = imageUrl(movie.poster_path);
-        const moviePageUrl = App.page('movie.html', { id: movie.tmdb_id });
+        const posterUrl = movieImageUrl(movie.poster_path);
+        const moviePageUrl = createPageUrl('movie.html', { id: movie.tmdb_id });
 
         return `
           <article class="poster-card">
@@ -99,7 +105,7 @@ document.addEventListener('DOMContentLoaded', () => {
       showLoading('Consultando catálogo da TMDB...');
 
       try {
-        const response = await Api.get(
+        const response = await api.get(
           `/api/movies/search?q=${encodeURIComponent(query)}`
         );
         renderCards(response.results);
@@ -113,11 +119,16 @@ document.addEventListener('DOMContentLoaded', () => {
   // Carregamento Inicial de Filmes Populares
   // ---------------------------------------------------------------------------
   showLoading('Carregando destaques do catálogo...');
-  Api.get('/api/movies/popular')
+  api.get('/api/movies/popular')
     .then((data) => {
       renderCards(data.results);
     })
     .catch((error) => {
       showError(error.message);
     });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  void initializeNavigation();
+  initializeSearchPage();
 });

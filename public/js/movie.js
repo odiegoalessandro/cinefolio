@@ -1,8 +1,13 @@
+import { api } from './api.js';
+import { escapeHtml } from './html-escaping.js';
+import { movieImageUrl } from './images.js';
+import { initializeNavigation } from './nav.js';
+
 /**
  * Cinefolio - Detalhes do Filme e Gerenciamento de Status no Perfil
  */
 
-document.addEventListener('DOMContentLoaded', () => {
+function initializeMoviePage() {
   const urlParams = new URLSearchParams(window.location.search);
   const movieId = urlParams.get('id');
 
@@ -50,15 +55,15 @@ document.addEventListener('DOMContentLoaded', () => {
     showDetailMessage('Carregando informações do filme...');
 
     try {
-      const { movie } = await Api.get(`/api/movies/${movieId}`);
+      const { movie } = await api.get(`/api/movies/${movieId}`);
 
       // Renderiza o cabeçalho do filme
       const title = escapeHtml(movie.title);
       const originalTitle = movie.original_title ? escapeHtml(movie.original_title) : '';
       const year = escapeHtml(movie.release_year || 'Ano n/d');
       const overview = escapeHtml(movie.overview || 'Sinopse não disponível.');
-      const posterSrc = imageUrl(movie.poster_path);
-      const backdropSrc = imageUrl(movie.backdrop_path);
+      const posterSrc = movieImageUrl(movie.poster_path);
+      const backdropSrc = movieImageUrl(movie.backdrop_path);
 
       const genresHtml = Array.isArray(movie.genres) && movie.genres.length > 0
         ? movie.genres.map((g) => `<span class="genre-tag">${escapeHtml(g.name)}</span>`).join('')
@@ -130,7 +135,7 @@ document.addEventListener('DOMContentLoaded', () => {
           submitBtn.textContent = 'Salvando...';
         }
 
-        const result = await Api.put(`/api/movies/${movieId}/profile`, payload);
+        const result = await api.put(`/api/movies/${movieId}/profile`, payload);
         showFormMessage(result.message || 'Filme salvo com sucesso no seu perfil!', false);
 
         if (removeMovieBtn) {
@@ -157,7 +162,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       try {
-        await Api.delete(`/api/movies/${movieId}/profile`);
+        await api.delete(`/api/movies/${movieId}/profile`);
         showFormMessage('Filme removido do seu perfil com sucesso.', false);
         movieForm.reset();
         removeMovieBtn.classList.add('d-none');
@@ -168,4 +173,9 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   loadMovieDetails();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  void initializeNavigation();
+  initializeMoviePage();
 });
