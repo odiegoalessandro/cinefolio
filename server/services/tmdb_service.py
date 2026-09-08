@@ -1,44 +1,15 @@
-"""Serviço de integração com a API da The Movie Database (TMDB)."""
+"""Regras de catálogo construídas sobre a API da The Movie Database (TMDB)."""
 
-import json
-import os
-from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
-from urllib.request import Request, urlopen
+from urllib.request import urlopen
 
-TMDB_API_BASE = "https://api.themoviedb.org/3"
+from server.clients.tmdb_client import TmdbClient
 
 
 class TmdbService:
-    """Cliente para consulta do catálogo externo da TMDB sem expor chaves ao cliente."""
+    """Valida e normaliza dados de catálogo obtidos da TMDB."""
 
     def __init__(self, token: str = None, opener=urlopen):
-        self.token = token if token is not None else os.environ.get("TMDB_BEARER_TOKEN", "")
-        self.opener = opener
-
-    def _request(self, path: str, params: dict = None) -> dict:
-        """Executa uma requisição HTTP autenticada à API da TMDB."""
-        if not self.token:
-            raise ValueError("A chave da TMDB não está configurada no servidor (.env).")
-
-        query_string = f"?{urlencode(params)}" if params else ""
-        url = f"{TMDB_API_BASE}{path}{query_string}"
-
-        request = Request(
-            url,
-            headers={
-                "Authorization": f"Bearer {self.token}",
-                "Accept": "application/json",
-                "User-Agent": "Cinefolio/1.0",
-            },
-        )
-
-        try:
-            with self.opener(request, timeout=10) as response:
-                content = response.read().decode("utf-8")
-                return json.loads(content)
-        except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as error:
-            raise ValueError("Não foi possível consultar o catálogo de filmes no momento.") from error
+        self.client = TmdbClient(token=token, opener=opener)
 
     @staticmethod
     def normalize_movie(movie: dict) -> dict:
@@ -64,13 +35,13 @@ class TmdbService:
         if not 1 <= len(query) <= 100:
             raise ValueError("A busca deve ter entre 1 e 100 caracteres.")
 
-        data = self._request("/search/movie", {"query": query, "language": "pt-BR"})
+        data = self.client.get("/search/movie", {"query": query, "language": "pt-BR"})
         results = data.get("results", [])
         return [self.normalize_movie(movie) for movie in results]
 
     def popular(self) -> list:
         """Obtém os filmes atualmente em destaque / populares."""
-        data = self._request("/movie/popular", {"language": "pt-BR"})
+        data = self.client.get("/movie/popular", {"language": "pt-BR"})
         results = data.get("results", [])
         return [self.normalize_movie(movie) for movie in results]
 
@@ -79,5 +50,5 @@ class TmdbService:
         if not str(tmdb_id).isdigit() or int(tmdb_id) <= 0:
             raise ValueError("Identificador de filme inválido.")
 
-        data = self._request(f"/movie/{int(tmdb_id)}", {"language": "pt-BR"})
+        data = self.client.get(f"/movie/{int(tmdb_id)}", {"language": "pt-BR"})
         return self.normalize_movie(data)

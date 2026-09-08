@@ -13,14 +13,21 @@ PUBLIC_DIR = Path(__file__).resolve().parent.parent / "public"
 class AppHandler(SimpleHTTPRequestHandler):
     """Atende o frontend e encaminha requisições de API ao roteador."""
 
-    def __init__(self, *args, database_path=DEFAULT_DATABASE, **kwargs):
+    def __init__(
+        self,
+        *args,
+        database_path=DEFAULT_DATABASE,
+        tmdb_token: str | None = None,
+        **kwargs,
+    ):
         self.database_path = database_path
+        self.tmdb_token = tmdb_token
         super().__init__(*args, directory=str(PUBLIC_DIR), **kwargs)
 
     def dispatch_api(self) -> None:
         connection = get_connection(self.database_path)
         try:
-            Router(connection).dispatch(self)
+            Router(connection, tmdb_token=self.tmdb_token).dispatch(self)
         finally:
             connection.close()
 
