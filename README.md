@@ -137,15 +137,23 @@ cinefolio/
 │   ├── css/
 │   │   └── app.css           # Estilização completa e temas em Dark Mode
 │   └── js/
-│       ├── api.js            # Cliente HTTP fetch e utilitários globais
-│       ├── auth.js           # Gerenciamento de login e cadastro
-│       ├── nav.js            # Controle da barra de navegação e sessão
-│       ├── movie.js          # Interações da tela de detalhes e CRUD
-│       ├── profile.js        # Renderização do perfil e diálogo de reviews
-│       ├── search.js         # Busca reativa e destaques populares
-│       └── settings.js       # Edição de perfil e exclusão de conta
+│       ├── api.js                 # Cliente HTTP
+│       ├── navigation.js          # URLs e redirecionamentos
+│       ├── html-escaping.js       # Escape para interpolação HTML
+│       ├── images.js              # URLs e fallbacks de imagens
+│       ├── file-protocol-guard.js # Orientação para file://
+│       ├── nav.js                 # Barra de navegação
+│       ├── auth.js                # Entrypoint de login e cadastro
+│       ├── movie.js               # Entrypoint de detalhes
+│       ├── profile.js             # Entrypoint de perfil público
+│       ├── search.js              # Entrypoint do catálogo
+│       ├── settings.js            # Entrypoint de configurações
+│       └── tests/                  # Testes Node sem dependências
 └── server/                   # Backend em Python nativo
-    ├── main.py               # Servidor HTTP multithread e dispatcher
+    ├── __main__.py           # Atalho de execução: python -m server
+    ├── config.py             # Carregamento do .env e configuração imutável
+    ├── http_handler.py       # Fronteira entre arquivos estáticos e API
+    ├── main.py               # Composição e lifecycle do servidor HTTP
     ├── router.py             # Roteador HTTP, parsing e tratamento de erros
     ├── schema.sql            # Script DDL do banco de dados
     ├── database/
@@ -163,7 +171,10 @@ cinefolio/
     │   ├── movie_repository.py
     │   └── user_movie_repository.py
     └── tests/                # Testes unitários automatizados
+        ├── test_config.py    # Testes de configuração do servidor
         ├── test_core.py      # Testes de banco, hashing, auth e regras de negócio
+        ├── test_frontend_assets.py # Testes HTTP dos módulos e perfil público
+        ├── test_server.py    # Testes de composição do servidor
         └── test_tmdb.py      # Testes de catálogo e isolamento da API TMDB
 ```
 
@@ -192,6 +203,7 @@ cinefolio/
 
 ### 7.1. Pré-requisitos
 - **Python 3.10** ou superior instalado.
+- **Node.js 22** ou superior, somente para executar os testes JavaScript.
 - Chave/Token de leitura da API TMDB (gratuita em [themoviedb.org](https://www.themoviedb.org/)).
 
 ### 7.2. Passo a Passo de Configuração
@@ -221,7 +233,7 @@ cinefolio/
 
 3. **Iniciar a Aplicação:**
    ```bash
-   python -m server.main
+   python -m server
    ```
 
 4. **Acessar no Navegador:**
@@ -236,7 +248,7 @@ cinefolio/
 
 ## 8. Execução dos Testes Automatizados
 
-A suíte de testes unitários valida o esquema do banco, operações de CRUD, integridade referencial, hashing com salt e integração simulada (mocks):
+A suíte automatizada valida regras de negócio, persistência, servidor HTTP e módulos do frontend:
 
 ```bash
 # Validação de sintaxe e compilação
@@ -244,6 +256,9 @@ python -m compileall server
 
 # Execução de todos os testes unitários
 python -m unittest discover -s server/tests -v
+
+# Execução dos testes JavaScript
+node --test public/js/tests/*.test.mjs
 ```
 
 ---

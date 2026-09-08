@@ -1,8 +1,12 @@
+import { api } from './api.js';
+import { initializeNavigation } from './nav.js';
+import { navigateTo } from './navigation.js';
+
 /**
  * Cinefolio - Configurações de Perfil e Gerenciamento de Conta
  */
 
-document.addEventListener('DOMContentLoaded', () => {
+function initializeSettingsPage() {
   const settingsForm = document.querySelector('#settings-form');
   const settingsMessage = document.querySelector('#settings-message');
   const deleteAccountBtn = document.querySelector('#delete-account-btn');
@@ -24,10 +28,10 @@ document.addEventListener('DOMContentLoaded', () => {
    */
   async function loadUserSettings() {
     try {
-      const { user } = await Api.get('/api/auth/me');
+      const { user } = await api.get('/api/auth/me');
 
       if (!user) {
-        App.go('login.html');
+        navigateTo('login.html');
         return;
       }
 
@@ -41,7 +45,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
       }
     } catch {
-      App.go('login.html');
+      navigateTo('login.html');
     }
   }
 
@@ -69,7 +73,7 @@ document.addEventListener('DOMContentLoaded', () => {
           submitBtn.textContent = 'Salvando...';
         }
 
-        await Api.put('/api/profile', payload);
+        await api.put('/api/profile', payload);
         showMessage('Perfil atualizado com sucesso!', false);
       } catch (error) {
         showMessage(error.message, true);
@@ -94,9 +98,9 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!confirmed) return;
 
       try {
-        await Api.delete('/api/account');
+        await api.delete('/api/account');
         alert('Sua conta foi excluída com sucesso.');
-        App.go('index.html');
+        navigateTo('index.html');
       } catch (error) {
         showMessage('Erro ao excluir conta: ' + error.message, true);
       }
@@ -104,4 +108,9 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   loadUserSettings();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  void initializeNavigation();
+  initializeSettingsPage();
 });

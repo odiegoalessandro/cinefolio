@@ -1,8 +1,18 @@
+import { api } from './api.js';
+import { escapeHtml } from './html-escaping.js';
+import {
+  avatarImageUrl,
+  bannerImageUrl,
+  movieImageUrl,
+} from './images.js';
+import { initializeNavigation } from './nav.js';
+import { createPageUrl } from './navigation.js';
+
 /**
  * Cinefolio - Perfil Público e Visualização de Reviews
  */
 
-document.addEventListener('DOMContentLoaded', () => {
+function initializeProfilePage() {
   const urlParams = new URLSearchParams(window.location.search);
   const username = urlParams.get('user');
 
@@ -28,8 +38,8 @@ document.addEventListener('DOMContentLoaded', () => {
    */
   function renderMovieCard(movie) {
     const title = escapeHtml(movie.title);
-    const posterSrc = imageUrl(movie.poster_path);
-    const movieUrl = App.page('movie.html', { id: movie.tmdb_id });
+    const posterSrc = movieImageUrl(movie.poster_path);
+    const movieUrl = createPageUrl('movie.html', { id: movie.tmdb_id });
 
     const ratingHtml =
       movie.rating !== null && movie.rating !== undefined
@@ -153,12 +163,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   showProfileMessage('Carregando dados do perfil...');
 
-  Api.get(`/api/profiles/${encodeURIComponent(username)}`)
+  api.get(`/api/profiles/${encodeURIComponent(username)}`)
     .then(({ profile: data }) => {
       const displayName = escapeHtml(data.display_name);
       const userHandle = escapeHtml(data.username);
       const bio = escapeHtml(data.bio || 'Sem biografia informada.');
-      const avatarSrc = profileImageUrl(data.avatar_url);
+      const avatarSrc = avatarImageUrl(data.avatar_url);
       const bannerSrc = bannerImageUrl(data.banner_url);
 
       const stats = data.stats || {};
@@ -219,4 +229,9 @@ document.addEventListener('DOMContentLoaded', () => {
     .catch((error) => {
       showProfileMessage(error.message);
     });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  void initializeNavigation();
+  initializeProfilePage();
 });
