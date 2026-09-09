@@ -9,17 +9,22 @@ from server.database.connection import (
     initialize_database,
 )
 from server.http_handler import AppHandler
+from server.services.avatar_mutation_coordinator import AvatarMutationCoordinator
 
 
 def create_server(
     config: ServerConfig,
     database_path=DEFAULT_DATABASE,
+    avatar_upload_directory=None,
 ) -> ThreadingHTTPServer:
     """Cria o servidor HTTP com as dependências necessárias ao handler."""
+    avatar_mutation_coordinator = AvatarMutationCoordinator()
     handler_factory = partial(
         AppHandler,
         database_path=database_path,
         tmdb_token=config.tmdb_bearer_token,
+        avatar_upload_directory=avatar_upload_directory,
+        avatar_mutation_coordinator=avatar_mutation_coordinator,
     )
     return ThreadingHTTPServer((config.host, config.port), handler_factory)
 

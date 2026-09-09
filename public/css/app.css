@@ -576,6 +576,38 @@ img {
   flex-shrink: 0;
 }
 
+/* ===========================================================================
+   9. Configurações de Perfil
+   ========================================================================== */
+.settings-avatar {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 1.25rem;
+}
+
+.settings-avatar-content {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+}
+
+.settings-avatar-preview {
+  width: 96px;
+  height: 96px;
+  flex-shrink: 0;
+  border: 2px solid var(--border-color);
+  border-radius: 50%;
+  object-fit: cover;
+  background-color: var(--bg-surface);
+}
+
+@media (max-width: 576px) {
+  .settings-avatar-content {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
 .profile-info-wrap {
   flex: 1;
 }

@@ -1,20 +1,6 @@
 """Controlador responsável pelos fluxos de autenticação e sessão do usuário."""
 
-
-def sanitize_user(user: dict) -> dict:
-    """Filtra campos sensíveis do objeto de usuário antes de enviar ao cliente."""
-    if not user:
-        return None
-    allowed_keys = (
-        "id",
-        "username",
-        "display_name",
-        "bio",
-        "avatar_url",
-        "banner_url",
-        "created_at",
-    )
-    return {key: user[key] for key in allowed_keys if key in user.keys()}
+from server.serializers.user import sanitize_user
 
 
 class AuthController:

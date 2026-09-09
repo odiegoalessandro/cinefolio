@@ -80,7 +80,7 @@ class ServerBootstrapTests(unittest.TestCase):
                 tmdb_bearer_token="token-da-configuracao",
             )
 
-            with patch("server.router.TmdbService", FakeTmdbService):
+            with patch("server.application.TmdbService", FakeTmdbService):
                 server = server_main.create_server(config, database_path=database_path)
                 with running_server(server) as port:
                     with urlopen(
@@ -131,6 +131,18 @@ class ServerBootstrapTests(unittest.TestCase):
             "application/json",
         )
         self.assertEqual(body, {"error": "Rota não encontrada."})
+
+    def test_create_server_accepts_an_isolated_avatar_upload_directory(self):
+        """Falha se testes de upload precisarem escrever em public/uploads do repositório."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            upload_directory = Path(temp_dir) / "avatars"
+            server = server_main.create_server(
+                ServerConfig(host="127.0.0.1", port=0),
+                avatar_upload_directory=upload_directory,
+            )
+
+            self.assertEqual(server.RequestHandlerClass.keywords["avatar_upload_directory"], upload_directory)
+            server.server_close()
 
 
 if __name__ == "__main__":

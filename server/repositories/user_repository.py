@@ -49,23 +49,41 @@ class UserRepository:
         user_id: int,
         display_name: str,
         bio: str,
-        avatar_url: str,
         banner_url: str,
     ):
-        """Atualiza os dados de perfil de um usuário existente."""
+        """Atualiza os dados textuais de um usuário sem alterar seu avatar."""
         self.connection.execute(
             """
             UPDATE users
             SET display_name = ?,
                 bio = ?,
-                avatar_url = ?,
                 banner_url = ?
             WHERE id = ?
             """,
-            (display_name, bio, avatar_url, banner_url, user_id),
+            (display_name, bio, banner_url, user_id),
         )
         self.connection.commit()
         return self.get_by_id(user_id)
+
+    def update_avatar_url(self, user_id: int, avatar_url: str):
+        """Atualiza somente a URL de avatar do usuário identificado pela sessão."""
+        self.connection.execute(
+            "UPDATE users SET avatar_url = ? WHERE id = ?",
+            (avatar_url, user_id),
+        )
+        self.connection.commit()
+        return self.get_by_id(user_id)
+
+    def avatar_url_is_exclusive_to_user(self, user_id: int, avatar_url: str) -> bool:
+        """Confirma que uma URL local pertence somente ao usuário que a remove."""
+        if not avatar_url:
+            return False
+
+        shared = self.connection.execute(
+            "SELECT 1 FROM users WHERE avatar_url = ? AND id != ? LIMIT 1",
+            (avatar_url, user_id),
+        ).fetchone()
+        return shared is None
 
     def delete(self, user_id: int):
         """Remove o usuário e todos os seus dados associados em cascata."""

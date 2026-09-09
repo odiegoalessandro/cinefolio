@@ -1,11 +1,14 @@
 """Controlador responsável pela visualização de perfis públicos e manutenção da conta."""
 
-from server.controllers.auth_controller import sanitize_user
+from server.serializers.user import sanitize_user
 
 
 def validate_profile_payload(data: dict) -> dict:
     """Valida os dados recebidos para atualização cadastral do perfil."""
-    fields = ("display_name", "bio", "avatar_url", "banner_url")
+    if "avatar_url" in data:
+        raise ValueError("Use o envio de foto para alterar o avatar.")
+
+    fields = ("display_name", "bio", "banner_url")
     values = {key: data.get(key, "") for key in fields}
 
     if not all(isinstance(val, str) for val in values.values()):
@@ -13,7 +16,6 @@ def validate_profile_payload(data: dict) -> dict:
 
     display_name = values["display_name"].strip()
     bio = values["bio"].strip()
-    avatar_url = values["avatar_url"].strip()
     banner_url = values["banner_url"].strip()
 
     if not 1 <= len(display_name) <= 80:
@@ -25,15 +27,18 @@ def validate_profile_payload(data: dict) -> dict:
     return {
         "display_name": display_name,
         "bio": bio,
-        "avatar_url": avatar_url,
         "banner_url": banner_url,
     }
 
 
 class ProfileController:
-    """Controlador para operações de perfil e conta."""
+    """Controlador para leitura e atualização de perfil."""
 
-    def __init__(self, profile_service, user_repository):
+    def __init__(
+        self,
+        profile_service,
+        user_repository,
+    ):
         self.profile_service = profile_service
         self.user_repository = user_repository
 
@@ -46,8 +51,7 @@ class ProfileController:
 
     def update_profile(self, current_user: dict, payload: dict) -> dict:
         """Atualiza os dados de perfil do usuário autenticado."""
-        if not current_user:
-            raise PermissionError("Autenticação necessária.")
+        self._require_current_user(current_user)
 
         validated = validate_profile_payload(payload)
         updated_user = self.user_repository.update_profile(
@@ -56,10 +60,8 @@ class ProfileController:
         )
         return {"user": sanitize_user(updated_user)}
 
-    def delete_account(self, current_user: dict) -> dict:
-        """Exclui a conta do usuário e todos os registros relacionados."""
+    @staticmethod
+    def _require_current_user(current_user: dict) -> None:
+        """Bloqueia qualquer mutação de perfil sem uma sessão válida."""
         if not current_user:
             raise PermissionError("Autenticação necessária.")
-
-        self.user_repository.delete(current_user["id"])
-        return {"ok": True, "message": "Conta excluída com sucesso."}
