@@ -1,21 +1,20 @@
 import { api } from './api.js';
+import { initializeAvatarSettings } from './avatar-settings.js';
 import { initializeNavigation } from './nav.js';
 import { navigateTo } from './navigation.js';
 
-/**
- * Cinefolio - Configurações de Perfil e Gerenciamento de Conta
- */
-
-function initializeSettingsPage() {
+export function initializeSettingsPage() {
   const settingsForm = document.querySelector('#settings-form');
   const settingsMessage = document.querySelector('#settings-message');
   const deleteAccountBtn = document.querySelector('#delete-account-btn');
+  const avatarControls = {
+    fileInput: document.querySelector('#input-avatar-file'),
+    preview: document.querySelector('#avatar-preview'),
+    removeButton: document.querySelector('#remove-avatar-btn'),
+    uploadButton: document.querySelector('#upload-avatar-btn'),
+  };
+  let avatarSettings = null;
 
-  /**
-   * Exibe mensagens de feedback no painel de configurações.
-   * @param {string} message - Texto da mensagem.
-   * @param {boolean} isError - Define se a mensagem é de erro.
-   */
   function showMessage(message, isError = false) {
     if (!settingsMessage) return;
     settingsMessage.textContent = message;
@@ -23,9 +22,6 @@ function initializeSettingsPage() {
     settingsMessage.classList.remove('d-none');
   }
 
-  /**
-   * Carrega os dados atuais do usuário autenticado no formulário.
-   */
   async function loadUserSettings() {
     try {
       const { user } = await api.get('/api/auth/me');
@@ -35,7 +31,6 @@ function initializeSettingsPage() {
         return;
       }
 
-      // Preenche os campos do formulário
       if (settingsForm) {
         Object.entries(user).forEach(([key, value]) => {
           const input = settingsForm.querySelector(`[name="${key}"]`);
@@ -44,14 +39,18 @@ function initializeSettingsPage() {
           }
         });
       }
+
+      avatarSettings = initializeAvatarSettings({
+        apiClient: api,
+        initialAvatarUrl: user.avatar_url,
+        onMessage: showMessage,
+        ...avatarControls,
+      });
     } catch {
       navigateTo('login.html');
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Atualização do Perfil (Salvar Alterações)
-  // ---------------------------------------------------------------------------
   if (settingsForm) {
     settingsForm.addEventListener('submit', async (event) => {
       event.preventDefault();
@@ -60,7 +59,6 @@ function initializeSettingsPage() {
       const payload = {
         display_name: (formData.get('display_name') || '').trim(),
         bio: (formData.get('bio') || '').trim(),
-        avatar_url: (formData.get('avatar_url') || '').trim(),
         banner_url: (formData.get('banner_url') || '').trim(),
       };
 
@@ -73,7 +71,8 @@ function initializeSettingsPage() {
           submitBtn.textContent = 'Salvando...';
         }
 
-        await api.put('/api/profile', payload);
+        const { user } = await api.put('/api/profile', payload);
+        avatarSettings?.setAvatarUrl(user.avatar_url);
         showMessage('Perfil atualizado com sucesso!', false);
       } catch (error) {
         showMessage(error.message, true);
@@ -86,9 +85,6 @@ function initializeSettingsPage() {
     });
   }
 
-  // ---------------------------------------------------------------------------
-  // Exclusão Permanente da Conta
-  // ---------------------------------------------------------------------------
   if (deleteAccountBtn) {
     deleteAccountBtn.addEventListener('click', async () => {
       const confirmed = confirm(

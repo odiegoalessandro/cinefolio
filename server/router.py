@@ -4,12 +4,14 @@ Mapeia as requisições para os controladores correspondentes.
 """
 
 from http import HTTPStatus
+from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from server.controllers.auth_controller import AuthController, sanitize_user
 from server.controllers.movie_controller import MovieController, validate_movie_payload
 from server.controllers.profile_controller import ProfileController, validate_profile_payload
 from server.http.errors import write_exception_response
+from server.http.multipart import read_multipart_file
 from server.http.request_json import read_json
 from server.http.response_json import json_response
 from server.http.session_cookies import (
@@ -21,6 +23,7 @@ from server.repositories.movie_repository import MovieRepository
 from server.repositories.user_movie_repository import UserMovieRepository
 from server.repositories.user_repository import UserRepository
 from server.services.auth_service import AuthService
+from server.services.avatar_storage import AvatarStorage
 from server.services.profile_service import ProfileService
 from server.services.tmdb_service import TmdbService
 
@@ -33,7 +36,13 @@ profile_payload = validate_profile_payload
 class Router:
     """Roteador responsável por despachar as requisições da API."""
 
-    def __init__(self, connection, tmdb_token: str | None = None):
+    def __init__(
+        self,
+        connection,
+        avatar_upload_directory: Path,
+        avatar_mutation_coordinator,
+        tmdb_token: str | None = None,
+    ):
         self.connection = connection
 
         # Inicialização dos repositórios
@@ -45,6 +54,7 @@ class Router:
         self.auth_service = AuthService(self.user_repo)
         self.profile_service = ProfileService(self.user_repo, self.user_movie_repo)
         self.tmdb_service = TmdbService(token=tmdb_token)
+        self.avatar_storage = AvatarStorage(avatar_upload_directory)
 
         # Inicialização dos controladores
         self.auth_controller = AuthController(self.auth_service)
@@ -56,6 +66,8 @@ class Router:
         self.profile_controller = ProfileController(
             self.profile_service,
             self.user_repo,
+            self.avatar_storage,
+            avatar_mutation_coordinator,
         )
 
     def _extract_user(self, handler) -> tuple[dict, str]:
@@ -152,6 +164,17 @@ class Router:
             if path.startswith("/api/profiles/") and method == "GET":
                 username = path[len("/api/profiles/") :]
                 result = self.profile_controller.get_public_profile(username)
+                return json_response(handler, HTTPStatus.OK, result)
+
+            if path == "/api/profile/avatar" and method == "PUT":
+                if not current_user:
+                    raise PermissionError("Autenticação necessária.")
+                uploaded = read_multipart_file(handler)
+                result = self.profile_controller.replace_avatar(current_user, uploaded)
+                return json_response(handler, HTTPStatus.OK, result)
+
+            if path == "/api/profile/avatar" and method == "DELETE":
+                result = self.profile_controller.remove_avatar(current_user)
                 return json_response(handler, HTTPStatus.OK, result)
 
             if path == "/api/profile" and method == "PUT":

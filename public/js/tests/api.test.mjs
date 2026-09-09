@@ -57,6 +57,25 @@ test('post serializes its body as JSON', async () => {
   assert.equal(calls[0].options.method, 'POST');
 });
 
+test('putForm sends FormData without a JSON content type', async () => {
+  const { createApiClient } = await loadApiModule();
+  const calls = [];
+  const client = createApiClient(async (path, options) => {
+    calls.push({ path, options });
+    return response({ body: '{"user":{"avatar_url":"/uploads/avatars/a.png"}}' });
+  });
+  const formData = new FormData();
+  formData.set('avatar', new Blob(['image'], { type: 'image/png' }), 'a.png');
+
+  await client.putForm('/api/profile/avatar', formData);
+
+  assert.equal(calls[0].path, '/api/profile/avatar');
+  assert.equal(calls[0].options.method, 'PUT');
+  assert.equal(calls[0].options.headers.Accept, 'application/json');
+  assert.equal(calls[0].options.headers['Content-Type'], undefined);
+  assert.equal(calls[0].options.body, formData);
+});
+
 test('API errors preserve the server message', async () => {
   const { createApiClient } = await loadApiModule();
   const client = createApiClient(async () =>

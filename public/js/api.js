@@ -5,11 +5,11 @@ const JSON_HEADERS = Object.freeze({
 
 export function createApiClient(fetchImpl = globalThis.fetch) {
   async function request(path, options = {}) {
+    const { headers = JSON_HEADERS, ...requestOptions } = options;
     const response = await fetchImpl(path, {
-      ...options,
+      ...requestOptions,
       headers: {
-        ...JSON_HEADERS,
-        ...(options.headers || {}),
+        ...headers,
       },
     });
     const rawText = await response.text();
@@ -48,6 +48,13 @@ export function createApiClient(fetchImpl = globalThis.fetch) {
       return request(path, {
         method: 'PUT',
         body: JSON.stringify(body),
+      });
+    },
+    putForm(path, formData) {
+      return request(path, {
+        method: 'PUT',
+        body: formData,
+        headers: { Accept: 'application/json' },
       });
     },
     delete(path) {

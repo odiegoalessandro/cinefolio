@@ -1,4 +1,6 @@
 .env
+.worktrees/
+public/uploads/
 *.sqlite3
 *.db
 __pycache__/

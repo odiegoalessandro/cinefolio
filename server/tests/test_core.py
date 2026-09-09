@@ -221,6 +221,18 @@ class RouterValidationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             profile_payload({"display_name": ["Tipo", "Invalido"]})
 
+    def test_profile_payload_omits_avatar_changes(self):
+        """Falha se atualizar texto de perfil ainda alterar a foto por payload JSON."""
+        validated = profile_payload(
+            {
+                "display_name": "Nome",
+                "bio": "Biografia",
+                "banner_url": "",
+            }
+        )
+
+        self.assertNotIn("avatar_url", validated)
+
     def test_movie_payload_requires_status_and_known_fields(self):
         """Valida restrições do payload de classificação de filme."""
         with self.assertRaises(ValueError):

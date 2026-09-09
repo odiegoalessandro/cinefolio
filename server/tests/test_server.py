@@ -132,6 +132,18 @@ class ServerBootstrapTests(unittest.TestCase):
         )
         self.assertEqual(body, {"error": "Rota não encontrada."})
 
+    def test_create_server_accepts_an_isolated_avatar_upload_directory(self):
+        """Falha se testes de upload precisarem escrever em public/uploads do repositório."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            upload_directory = Path(temp_dir) / "avatars"
+            server = server_main.create_server(
+                ServerConfig(host="127.0.0.1", port=0),
+                avatar_upload_directory=upload_directory,
+            )
+
+            self.assertEqual(server.RequestHandlerClass.keywords["avatar_upload_directory"], upload_directory)
+            server.server_close()
+
 
 if __name__ == "__main__":
     unittest.main()
