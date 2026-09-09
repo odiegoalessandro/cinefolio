@@ -6,6 +6,8 @@ import threading
 import unittest
 from pathlib import Path
 
+from server.controllers.account_controller import AccountController
+from server.controllers.avatar_controller import AvatarController
 from server.controllers.profile_controller import ProfileController
 from server.database.connection import get_connection, initialize_database
 from server.http.multipart import UploadedFile
@@ -14,6 +16,7 @@ from server.repositories.user_repository import UserRepository
 from server.services.avatar_storage import AvatarStorage
 from server.services.avatar_mutation_coordinator import AvatarMutationCoordinator
 from server.services.auth_service import hash_password
+from server.services.avatar_service import AvatarService
 from server.services.profile_service import ProfileService
 
 
@@ -35,10 +38,16 @@ class ProfileAvatarTests(unittest.TestCase):
         self.upload_directory = Path(self.temp_directory.name) / "avatars"
         self.storage = AvatarStorage(self.upload_directory)
         self.profile_service = ProfileService(self.users, self.user_movies)
-        self.controller = ProfileController(
-            self.profile_service,
+        self.avatar_service = AvatarService(
             self.users,
             self.storage,
+            AvatarMutationCoordinator(),
+        )
+        self.avatar_controller = AvatarController(self.avatar_service)
+        self.account_controller = AccountController(self.avatar_service)
+        self.profile_controller = ProfileController(
+            self.profile_service,
+            self.users,
         )
 
     def tearDown(self):
@@ -59,7 +68,7 @@ class ProfileAvatarTests(unittest.TestCase):
         owner = self.create_test_user("owner")
         other = self.create_test_user("other")
 
-        result = self.controller.replace_avatar(
+        result = self.avatar_controller.replace_avatar(
             dict(owner),
             UploadedFile(content=PNG_BYTES, content_type="image/png"),
         )
@@ -70,12 +79,12 @@ class ProfileAvatarTests(unittest.TestCase):
     def test_replace_avatar_removes_the_previous_local_file_after_persisting_the_new_one(self):
         """Falha se substituir uma foto deixar o arquivo anterior acessível no disco."""
         owner = self.create_test_user("owner")
-        first = self.controller.replace_avatar(
+        first = self.avatar_controller.replace_avatar(
             dict(owner),
             UploadedFile(content=PNG_BYTES, content_type="image/png"),
         )
 
-        second = self.controller.replace_avatar(
+        second = self.avatar_controller.replace_avatar(
             dict(owner),
             UploadedFile(content=PNG_BYTES, content_type="image/png"),
         )
@@ -86,12 +95,12 @@ class ProfileAvatarTests(unittest.TestCase):
     def test_remove_avatar_clears_the_database_value_and_removes_the_local_file(self):
         """Falha se remover a foto não restaurar o avatar padrão do usuário."""
         owner = self.create_test_user("owner")
-        self.controller.replace_avatar(
+        self.avatar_controller.replace_avatar(
             dict(owner),
             UploadedFile(content=PNG_BYTES, content_type="image/png"),
         )
 
-        result = self.controller.remove_avatar(dict(owner))
+        result = self.avatar_controller.remove_avatar(dict(owner))
 
         self.assertEqual(result["user"]["avatar_url"], "")
         self.assertEqual(self.users.get_by_id(owner["id"])["avatar_url"], "")
@@ -100,12 +109,12 @@ class ProfileAvatarTests(unittest.TestCase):
     def test_update_profile_keeps_the_avatar_when_the_payload_omits_its_url(self):
         """Falha se atualizar textos apagar uma foto enviada pelo novo fluxo."""
         owner = self.create_test_user("owner")
-        with_avatar = self.controller.replace_avatar(
+        with_avatar = self.avatar_controller.replace_avatar(
             dict(owner),
             UploadedFile(content=PNG_BYTES, content_type="image/png"),
         )
 
-        result = self.controller.update_profile(
+        result = self.profile_controller.update_profile(
             dict(owner),
             {
                 "display_name": "Novo nome",
@@ -119,12 +128,12 @@ class ProfileAvatarTests(unittest.TestCase):
     def test_delete_account_removes_its_local_avatar_before_deleting_the_user(self):
         """Falha se excluir a conta deixar uma foto local órfã no armazenamento."""
         owner = self.create_test_user("owner")
-        self.controller.replace_avatar(
+        self.avatar_controller.replace_avatar(
             dict(owner),
             UploadedFile(content=PNG_BYTES, content_type="image/png"),
         )
 
-        result = self.controller.delete_account(dict(owner))
+        result = self.account_controller.delete_account(dict(owner))
 
         self.assertEqual(result["ok"], True)
         self.assertIsNone(self.users.get_by_id(owner["id"]))
@@ -133,7 +142,7 @@ class ProfileAvatarTests(unittest.TestCase):
     def test_delete_account_restores_the_avatar_when_database_deletion_fails(self):
         """Falha se a conta mantiver referência para uma foto removida após erro no banco."""
         owner = self.create_test_user("owner")
-        uploaded = self.controller.replace_avatar(
+        uploaded = self.avatar_controller.replace_avatar(
             dict(owner),
             UploadedFile(content=PNG_BYTES, content_type="image/png"),
         )
@@ -146,7 +155,7 @@ class ProfileAvatarTests(unittest.TestCase):
         self.users.delete = fail_delete
         try:
             with self.assertRaisesRegex(RuntimeError, "Banco indisponível"):
-                self.controller.delete_account(dict(owner))
+                self.account_controller.delete_account(dict(owner))
         finally:
             self.users.delete = original_delete
 
@@ -164,13 +173,12 @@ class ProfileAvatarTests(unittest.TestCase):
             connection = get_connection(self.database_path)
             users = UserRepository(connection)
             user_movies = UserMovieRepository(connection)
-            controller = ProfileController(
-                ProfileService(users, user_movies),
+            avatar_service = AvatarService(
                 users,
                 storage,
                 coordinator,
             )
-            return controller, connection
+            return AvatarController(avatar_service), connection
 
         def upload_avatar():
             controller, connection = create_thread_controller()

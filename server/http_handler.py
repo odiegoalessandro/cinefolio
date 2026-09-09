@@ -5,8 +5,8 @@ from pathlib import Path
 from re import compile as compile_pattern
 from urllib.parse import unquote, urlsplit
 
+from server.application import create_router
 from server.database.connection import DEFAULT_DATABASE, get_connection
-from server.router import Router
 from server.services.avatar_mutation_coordinator import AvatarMutationCoordinator
 
 
@@ -43,7 +43,7 @@ class AppHandler(SimpleHTTPRequestHandler):
     def dispatch_api(self) -> None:
         connection = get_connection(self.database_path)
         try:
-            Router(
+            create_router(
                 connection,
                 tmdb_token=self.tmdb_token,
                 avatar_upload_directory=self.avatar_upload_directory,

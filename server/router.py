@@ -4,12 +4,10 @@ Mapeia as requisições para os controladores correspondentes.
 """
 
 from http import HTTPStatus
-from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from server.controllers.auth_controller import AuthController, sanitize_user
-from server.controllers.movie_controller import MovieController, validate_movie_payload
-from server.controllers.profile_controller import ProfileController, validate_profile_payload
+from server.controllers.movie_controller import validate_movie_payload
+from server.controllers.profile_controller import validate_profile_payload
 from server.http.errors import write_exception_response
 from server.http.multipart import read_multipart_file
 from server.http.request_json import read_json
@@ -19,13 +17,7 @@ from server.http.session_cookies import (
     expire_session_cookie,
     read_session_token,
 )
-from server.repositories.movie_repository import MovieRepository
-from server.repositories.user_movie_repository import UserMovieRepository
-from server.repositories.user_repository import UserRepository
-from server.services.auth_service import AuthService
-from server.services.avatar_storage import AvatarStorage
-from server.services.profile_service import ProfileService
-from server.services.tmdb_service import TmdbService
+from server.serializers.user import sanitize_user
 
 
 # Exporta funções de validação para compatibilidade com a suíte de testes
@@ -38,42 +30,24 @@ class Router:
 
     def __init__(
         self,
-        connection,
-        avatar_upload_directory: Path,
-        avatar_mutation_coordinator,
-        tmdb_token: str | None = None,
+        auth_controller,
+        movie_controller,
+        profile_controller,
+        avatar_controller,
+        account_controller,
+        current_user_resolver,
     ):
-        self.connection = connection
-
-        # Inicialização dos repositórios
-        self.user_repo = UserRepository(connection)
-        self.movie_repo = MovieRepository(connection)
-        self.user_movie_repo = UserMovieRepository(connection)
-
-        # Inicialização dos serviços
-        self.auth_service = AuthService(self.user_repo)
-        self.profile_service = ProfileService(self.user_repo, self.user_movie_repo)
-        self.tmdb_service = TmdbService(token=tmdb_token)
-        self.avatar_storage = AvatarStorage(avatar_upload_directory)
-
-        # Inicialização dos controladores
-        self.auth_controller = AuthController(self.auth_service)
-        self.movie_controller = MovieController(
-            self.tmdb_service,
-            self.movie_repo,
-            self.user_movie_repo,
-        )
-        self.profile_controller = ProfileController(
-            self.profile_service,
-            self.user_repo,
-            self.avatar_storage,
-            avatar_mutation_coordinator,
-        )
+        self.auth_controller = auth_controller
+        self.movie_controller = movie_controller
+        self.profile_controller = profile_controller
+        self.avatar_controller = avatar_controller
+        self.account_controller = account_controller
+        self.current_user_resolver = current_user_resolver
 
     def _extract_user(self, handler) -> tuple[dict, str]:
         """Extrai o usuário autenticado e o token da requisição a partir dos cookies."""
         token = read_session_token(handler.headers.get("Cookie", ""))
-        current_user = self.auth_service.current_user(token)
+        current_user = self.current_user_resolver(token)
         return current_user, token
 
     def dispatch(self, handler):
@@ -170,11 +144,11 @@ class Router:
                 if not current_user:
                     raise PermissionError("Autenticação necessária.")
                 uploaded = read_multipart_file(handler)
-                result = self.profile_controller.replace_avatar(current_user, uploaded)
+                result = self.avatar_controller.replace_avatar(current_user, uploaded)
                 return json_response(handler, HTTPStatus.OK, result)
 
             if path == "/api/profile/avatar" and method == "DELETE":
-                result = self.profile_controller.remove_avatar(current_user)
+                result = self.avatar_controller.remove_avatar(current_user)
                 return json_response(handler, HTTPStatus.OK, result)
 
             if path == "/api/profile" and method == "PUT":
@@ -183,7 +157,7 @@ class Router:
                 return json_response(handler, HTTPStatus.OK, result)
 
             if path == "/api/account" and method == "DELETE":
-                result = self.profile_controller.delete_account(current_user)
+                result = self.account_controller.delete_account(current_user)
                 return json_response(
                     handler,
                     HTTPStatus.OK,

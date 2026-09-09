@@ -80,7 +80,7 @@ class ServerBootstrapTests(unittest.TestCase):
                 tmdb_bearer_token="token-da-configuracao",
             )
 
-            with patch("server.router.TmdbService", FakeTmdbService):
+            with patch("server.application.TmdbService", FakeTmdbService):
                 server = server_main.create_server(config, database_path=database_path)
                 with running_server(server) as port:
                     with urlopen(
