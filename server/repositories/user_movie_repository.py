@@ -90,8 +90,17 @@ class UserMovieRepository:
         status: Optional[str] = None,
         favorite: Optional[bool] = None,
         limit: Optional[int] = None,
+        since: Optional[str] = None,
+        until: Optional[str] = None,
     ):
-        """Lista os filmes do usuário com filtros opcionais de status ou favorito."""
+        """Lista os filmes do usuário com filtros opcionais de status, favorito ou data.
+
+        `since` e `until` (formato `AAAA-MM-DD`) restringem o resultado a uma janela
+        de datas, comparando a data efetiva de cada registro — a data em que o filme
+        foi assistido (`watched_at`) ou, na sua ausência, a data da última alteração
+        (`updated_at`). São limites inclusivos, o que permite excluir tanto registros
+        antigos quanto datas inválidas no futuro.
+        """
         query = """
             SELECT movies.*,
                    user_movies.status,
@@ -112,6 +121,18 @@ class UserMovieRepository:
         if favorite is not None:
             query += " AND user_movies.favorite = ?"
             parameters.append(int(bool(favorite)))
+
+        # Compara apenas a parte de data para lidar com `watched_at` (AAAA-MM-DD)
+        # e `updated_at` (timestamp ISO completo) no mesmo critério.
+        effective_date = "substr(COALESCE(user_movies.watched_at, user_movies.updated_at), 1, 10)"
+
+        if since:
+            query += f" AND {effective_date} >= ?"
+            parameters.append(since)
+
+        if until:
+            query += f" AND {effective_date} <= ?"
+            parameters.append(until)
 
         query += " ORDER BY COALESCE(user_movies.watched_at, user_movies.updated_at) DESC"
 
