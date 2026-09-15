@@ -3,6 +3,7 @@ import { escapeHtml } from './html-escaping.js';
 import {
   avatarImageUrl,
   bannerImageUrl,
+  DEFAULT_BANNER_IMAGE,
   movieImageUrl,
 } from './images.js';
 import { initializeNavigation } from './nav.js';
@@ -111,6 +112,24 @@ function initializeProfilePage() {
   }
 
   /**
+   * Garante que uma capa sempre apareça: se a URL informada não entregar uma
+   * imagem (link de página, arquivo inexistente ou acesso bloqueado), a imagem
+   * padrão do sistema assume o lugar em vez de deixar o banner vazio.
+   */
+  function attachBannerFallback() {
+    const bannerImage = profileContainer?.querySelector('.profile-banner-image');
+    if (!bannerImage) return;
+
+    bannerImage.addEventListener(
+      'error',
+      () => {
+        bannerImage.src = DEFAULT_BANNER_IMAGE;
+      },
+      { once: true }
+    );
+  }
+
+  /**
    * Abre o diálogo modal com o review completo do filme.
    * @param {HTMLElement} button - Botão que acionou o modal com os datasets.
    */
@@ -195,7 +214,8 @@ function initializeProfilePage() {
         .join('');
 
       profileContainer.innerHTML = `
-        <header class="profile-banner" style="background-image: url('${bannerSrc}')">
+        <header class="profile-banner">
+          <img class="profile-banner-image" src="${escapeHtml(bannerSrc)}" alt="" aria-hidden="true">
           <div class="profile-header-content">
             <img class="profile-avatar" src="${avatarSrc}" alt="Avatar de ${displayName}">
             <div class="profile-info-wrap">
@@ -225,6 +245,8 @@ function initializeProfilePage() {
           ${sectionsHtml}
         </main>
       `;
+
+      attachBannerFallback();
     })
     .catch((error) => {
       showProfileMessage(error.message);
