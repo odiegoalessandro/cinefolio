@@ -4,6 +4,7 @@ import gc
 import os
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 
 from server.database.connection import get_connection, initialize_database
 from server.repositories.movie_repository import MovieRepository
@@ -154,6 +155,97 @@ class DatabaseTestCase(unittest.TestCase):
         self.assertEqual(len(profile_data["sections"]["watched"]), 1)
         self.assertNotIn("password_hash", profile_data)
 
+    def test_recently_watched_limited_to_last_seven_days(self):
+        """Garante que "Assistidos Recentemente" ignora filmes fora da janela de 7 dias."""
+        user = self.create_test_user("ana")
+        recent_movie = self.create_test_movie(301)
+        old_movie = self.create_test_movie(302)
+
+        today = datetime.now(timezone.utc).date()
+        self.user_movies.upsert(
+            user_id=user["id"],
+            movie_id=recent_movie["id"],
+            status="WATCHED",
+            watched_at=(today - timedelta(days=2)).isoformat(),
+        )
+        self.user_movies.upsert(
+            user_id=user["id"],
+            movie_id=old_movie["id"],
+            status="WATCHED",
+            watched_at=(today - timedelta(days=10)).isoformat(),
+        )
+
+        profile_service = ProfileService(self.users, self.user_movies)
+        profile_data = profile_service.public_profile("ana")
+
+        recent_ids = [m["tmdb_id"] for m in profile_data["sections"]["recently_watched"]]
+        watched_ids = [m["tmdb_id"] for m in profile_data["sections"]["watched"]]
+
+        self.assertIn(recent_movie["tmdb_id"], recent_ids)
+        self.assertNotIn(old_movie["tmdb_id"], recent_ids)
+        # O filme antigo permanece em "Todos os Assistidos".
+        self.assertCountEqual(watched_ids, [recent_movie["tmdb_id"], old_movie["tmdb_id"]])
+
+    def test_recently_watched_falls_back_to_updated_at_without_date(self):
+        """Sem `watched_at`, a janela usa a data da última alteração do registro."""
+        user = self.create_test_user("bruno")
+        movie = self.create_test_movie(303)
+
+        self.user_movies.upsert(
+            user_id=user["id"],
+            movie_id=movie["id"],
+            status="WATCHED",
+            watched_at=None,
+        )
+
+        profile_service = ProfileService(self.users, self.user_movies)
+        profile_data = profile_service.public_profile("bruno")
+
+        recent_titles = [m["title"] for m in profile_data["sections"]["recently_watched"]]
+        self.assertIn(movie["title"], recent_titles)
+
+    def test_recently_watched_includes_boundary_day(self):
+        """Um filme assistido exatamente há 7 dias ainda aparece na seção."""
+        user = self.create_test_user("carla")
+        movie = self.create_test_movie(304)
+
+        boundary = datetime.now(timezone.utc).date() - timedelta(days=7)
+        self.user_movies.upsert(
+            user_id=user["id"],
+            movie_id=movie["id"],
+            status="WATCHED",
+            watched_at=boundary.isoformat(),
+        )
+
+        profile_service = ProfileService(self.users, self.user_movies)
+        profile_data = profile_service.public_profile("carla")
+
+        recent_titles = [m["title"] for m in profile_data["sections"]["recently_watched"]]
+        self.assertIn(movie["title"], recent_titles)
+
+    def test_recently_watched_excludes_future_date(self):
+        """Datas futuras não pertencem à janela e não podem aparecer na seção."""
+        user = self.create_test_user("duda")
+        movie = self.create_test_movie(305)
+
+        future = datetime.now(timezone.utc).date() + timedelta(days=30)
+        self.user_movies.upsert(
+            user_id=user["id"],
+            movie_id=movie["id"],
+            status="WATCHED",
+            watched_at=future.isoformat(),
+        )
+
+        profile_service = ProfileService(self.users, self.user_movies)
+        profile_data = profile_service.public_profile("duda")
+
+        recent_ids = [m["tmdb_id"] for m in profile_data["sections"]["recently_watched"]]
+        watched_ids = [m["tmdb_id"] for m in profile_data["sections"]["watched"]]
+
+        self.assertNotIn(movie["tmdb_id"], recent_ids)
+        # O registro continua em "Todos os Assistidos".
+        self.assertIn(movie["tmdb_id"], watched_ids)
+
 
 class AuthTestCase(DatabaseTestCase):
     """Testes de segurança, hashing e sessões de autenticação."""
@@ -244,6 +336,28 @@ class RouterValidationTests(unittest.TestCase):
         validated = movie_profile_payload({"status": "WATCHED", "favorite": True})
         self.assertEqual(validated["status"], "WATCHED")
         self.assertTrue(validated["favorite"])
+
+    def test_movie_payload_validates_watched_at(self):
+        """Valida formato e normalização da data em que o filme foi assistido."""
+        # Formato inválido
+        with self.assertRaises(ValueError):
+            movie_profile_payload({"status": "WATCHED", "watched_at": "10/05/2026"})
+
+        with self.assertRaises(ValueError):
+            movie_profile_payload({"status": "WATCHED", "watched_at": "ontem"})
+
+        # Data no futuro
+        tomorrow = datetime.now(timezone.utc).date() + timedelta(days=1)
+        with self.assertRaises(ValueError):
+            movie_profile_payload({"status": "WATCHED", "watched_at": tomorrow.isoformat()})
+
+        # Data válida é normalizada
+        validated = movie_profile_payload({"status": "WATCHED", "watched_at": "2026-6-1"})
+        self.assertEqual(validated["watched_at"], "2026-06-01")
+
+        # Ausência de data continua permitida
+        self.assertIsNone(movie_profile_payload({"status": "WATCHED"})["watched_at"])
+        self.assertIsNone(movie_profile_payload({"status": "WATCHED", "watched_at": ""})["watched_at"])
 
 
 if __name__ == "__main__":

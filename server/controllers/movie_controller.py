@@ -1,5 +1,7 @@
 """Controlador responsável pelas operações de catálogo e gerenciamento de filmes no perfil."""
 
+from datetime import datetime, timezone
+
 
 def validate_movie_payload(data: dict) -> dict:
     """Valida os dados recebidos para salvar ou atualizar um filme no perfil."""
@@ -33,7 +35,19 @@ def validate_movie_payload(data: dict) -> dict:
             review = None
 
     favorite = bool(data.get("favorite", False))
+
     watched_at = data.get("watched_at") or None
+    if watched_at is not None:
+        watched_at = str(watched_at).strip() or None
+    if watched_at is not None:
+        try:
+            parsed_watched_at = datetime.strptime(watched_at, "%Y-%m-%d").date()
+        except ValueError:
+            raise ValueError("A data em que assistiu deve estar no formato AAAA-MM-DD.")
+        if parsed_watched_at > datetime.now(timezone.utc).date():
+            raise ValueError("A data em que assistiu não pode estar no futuro.")
+        # Normaliza para AAAA-MM-DD, garantindo comparações consistentes no banco.
+        watched_at = parsed_watched_at.isoformat()
 
     return {
         "status": status,

@@ -1,5 +1,7 @@
 .env
 .worktrees/
+.openclaude/
+.openclaude
 public/uploads/
 *.sqlite3
 *.db
