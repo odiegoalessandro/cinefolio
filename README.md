@@ -6,12 +6,12 @@
 
 | Campo | Informações do Grupo |
 | :--- | :--- |
-| **Instituição** | `[Nome da Instituição de Ensino]` |
-| **Curso** | `[Nome do Curso / Ex: Ciência da Computação / ADS]` |
+| **Instituição** | `Universidade Paulista UNIP` |
+| **Curso** | `Ciência da Computação` |
 | **Disciplina** | Banco de Dados — Avaliação NP1 |
-| **Professor(a)** | `[Nome do Professor]` |
-| **Turma / Semestre** | `[Turma / Semestre Letivo]` |
-| **Integrantes (Nome Completo & RA)** | • `[Nome do Integrante 1]` — RA: `[0000000]`<br>• `[Nome do Integrante 2]` — RA: `[0000000]`<br>• `[Nome do Integrante 3]` — RA: `[0000000]`<br>• `[Nome do Integrante 4]` — RA: `[0000000]` |
+| **Professor(a)** | `FERNANDO BUENO` |
+| **Turma / Semestre** | `CC4P17 / Terceiro Semestre ` |
+| **Integrantes (Nome Completo & RA)** | • `[João Eduardo de Lima Amaral]` — RA: `[R650FE6]`<br>• `[Ana júlia Branco de Oliveira]` — RA: `[R8233G2]`<br>• `[Diego Alessandro da Cruz Martins]` — RA: `[H2250G3]`|
 
 ---
 
@@ -57,7 +57,16 @@ O catálogo de filmes é alimentado em tempo real pela API da **The Movie Databa
 
 ## 4. Modelagem de Dados (DER & DDL)
 
-### 4.1. Diagrama Entidade-Relacionamento (DER)
+### 4.1. Método Entidade-Relacionamento (MER)
+
+```mermaid
+erDiagram
+    USERS ||--o{ USER_MOVIES : "avalia e cataloga"
+    MOVIES ||--o{ USER_MOVIES : "e referenciado em"
+    USERS ||--o{ SESSIONS : "possui sessoes ativas"
+```
+
+### 4.2. Diagrama Entidade-Relacionamento (DER)
 
 ```mermaid
 erDiagram
@@ -108,7 +117,7 @@ erDiagram
     }
 ```
 
-### 4.2. Estrutura DDL Completa ([`server/schema.sql`](server/schema.sql))
+### 4.3. Estrutura DDL Completa ([`server/schema.sql`](server/schema.sql))
 O esquema SQL completo inclui criação de tabelas, restrições de integridade, remoção em cascata e índices para otimização:
 - `idx_user_movies_status`: Acelera a filtragem por status no perfil.
 - `idx_user_movies_favorite`: Otimiza a recuperação da seção de favoritos.
