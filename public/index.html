@@ -19,14 +19,22 @@
         <a class="navbar-brand" href="index.html">
           <span>🎬</span> Cinefolio
         </a>
+        <!-- Botão "hambúrguer": só aparece em telas pequenas (comportamento
+             padrão do Bootstrap, controlado por data-bs-toggle/data-bs-target) -->
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNavbar" aria-controls="mainNavbar" aria-expanded="false" aria-label="Alternar navegação">
           <span class="navbar-toggler-icon"></span>
         </button>
 
         <div class="collapse navbar-collapse" id="mainNavbar">
+          <!-- id="nav-auth-container": este bloco é SUBSTITUÍDO
+               dinamicamente por nav.js quando o usuário está logado (ver
+               createAuthenticatedNavigationMarkup em nav.js); o conteúdo
+               abaixo é só o estado "padrão" (visitante não logado) -->
           <div id="nav-auth-container" class="ms-auto">
             <ul class="navbar-nav align-items-center gap-2">
               <li class="nav-item">
+                <!-- classe "auth-link": nav.js também atualiza o href e o
+                     texto deste link para "Meu Perfil" caso haja sessão ativa -->
                 <a class="nav-link auth-link" href="login.html">Entrar</a>
               </li>
               <li class="nav-item" id="nav-register-link">
@@ -50,6 +58,10 @@
           Busque títulos no catálogo mundial, registre o que assistiu, avalie com notas, escreva suas críticas e compartilhe seu perfil público.
         </p>
 
+        <!-- id="search-form": search.js escuta o evento "submit" deste
+             formulário, impede o recarregamento padrão da página
+             (event.preventDefault()) e busca os filmes via fetch,
+             chamando GET /api/movies/search?q=... -->
         <form id="search-form" class="search-form-hero" role="search">
           <input
             type="search"
@@ -69,8 +81,14 @@
       <!-- Grade de Filmes -->
       <section>
         <div class="section-heading">
+          <!-- id="section-title": search.js troca este texto para
+               'Resultados para "..."' assim que uma busca é enviada -->
           <h2 id="section-title" class="section-title">🔥 Destaques Populares</h2>
         </div>
+        <!-- id="movie-results": ao carregar a página, search.js já
+             preenche esta grade com GET /api/movies/popular; depois de
+             uma busca, o conteúdo é substituído pelos resultados
+             encontrados (ver renderCards em search.js) -->
         <div id="movie-results" class="poster-grid">
           <!-- Os cards de filmes são inseridos dinamicamente via JS -->
         </div>
@@ -86,9 +104,13 @@
     </div>
   </footer>
 
-  <!-- Scripts -->
+  <!-- Scripts: carregados no FINAL do body, para não bloquear a
+       renderização inicial da página enquanto baixam -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- file-protocol-guard roda ANTES de tudo (sem type="module") para
+       avisar se a página foi aberta com duplo clique em vez de via servidor -->
   <script src="js/file-protocol-guard.js"></script>
+  <!-- type="module" habilita import/export do ES Modules dentro de search.js -->
   <script type="module" src="js/search.js"></script>
 </body>
 </html>

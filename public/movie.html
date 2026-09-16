@@ -23,6 +23,10 @@
           <span class="navbar-toggler-icon"></span>
         </button>
 
+        <!-- id="nav-auth-container": este bloco é SUBSTITUÍDO
+             dinamicamente por nav.js quando o usuário está logado (ver
+             createAuthenticatedNavigationMarkup em nav.js); o conteúdo
+             abaixo é só o estado "padrão" (visitante não logado) -->
         <div class="collapse navbar-collapse" id="movieNavbar">
           <div id="nav-auth-container" class="ms-auto">
             <ul class="navbar-nav align-items-center gap-2">
@@ -43,6 +47,9 @@
   <div class="main-wrapper">
     <main class="page-container">
       <!-- Container com Detalhes do Filme da TMDB -->
+      <!-- id="movie-detail": movie.js substitui TODO este conteúdo
+           (spinner de carregamento) pelo cabeçalho do filme, assim que a
+           requisição a /api/movies/{id} responder --> 
       <section id="movie-detail" aria-label="Informações do Filme">
         <div class="loading-spinner-wrap">
           <div class="spinner-custom"></div>
@@ -56,6 +63,10 @@
           <h2 class="panel-title fs-4">💾 Adicionar ou Atualizar no Meu Perfil</h2>
           <p class="panel-subtitle">Defina o status, sua avaliação e anote suas impressões sobre o filme.</p>
 
+          <!-- id="movie-form": os campos aqui dentro (status, rating,
+               watched_at, favorite, review) correspondem EXATAMENTE aos
+               nomes esperados por validate_movie_payload no backend
+               (ver movie_controller.py) -->
           <form id="movie-form" novalidate>
             <div class="row g-3">
               <!-- Status do Filme -->
@@ -116,6 +127,8 @@
                   maxlength="5000"
                   placeholder="Escreva suas impressões, análise e opiniões sobre este filme..."
                 ></textarea>
+                <!-- Espelha o limite de 5000 caracteres validado também
+                     no backend (validate_movie_payload) -->
                 <div class="form-text text-muted small text-end">Máximo de 5000 caracteres.</div>
               </div>
             </div>
@@ -126,6 +139,8 @@
               <button type="submit" class="btn btn-accent">
                 💾 Salvar no Perfil
               </button>
+              <!-- Começa escondido (d-none): só aparece se o filme JÁ
+                   estiver salvo no perfil (ver loadMovieDetails em movie.js) -->
               <button id="btn-remove-movie" type="button" class="btn btn-danger-custom d-none">
                 🗑️ Remover do Perfil
               </button>

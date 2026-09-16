@@ -46,6 +46,9 @@
         <h1 class="panel-title">⚙️ Configurações do Perfil</h1>
         <p class="panel-subtitle">Personalize a identidade visual e as informações públicas do seu perfil.</p>
 
+        <!-- id="settings-form": os "name" dos campos abaixo
+             (display_name, bio, banner_url) correspondem aos campos
+             aceitos por validate_profile_payload no backend -->
         <form id="settings-form" novalidate>
           <div class="mb-3">
             <label for="input-display-name" class="form-label">Nome de Exibição</label>
@@ -73,6 +76,10 @@
             <div class="form-text text-muted small text-end">Máximo de 500 caracteres.</div>
           </div>
 
+          <!-- Seção de Avatar: estes elementos são conectados ao módulo
+               avatar-settings.js (ver settings.js: initializeAvatarSettings),
+               que tem um fluxo de upload INDEPENDENTE do resto do
+               formulário (rota /api/profile/avatar, não /api/profile) -->
           <section class="settings-avatar mb-4" aria-labelledby="avatar-heading">
             <h2 id="avatar-heading" class="fs-5">Foto de perfil</h2>
             <div class="settings-avatar-content">
@@ -91,8 +98,13 @@
                   class="form-control"
                   accept="image/jpeg,image/png,image/webp"
                 >
+                <!-- Reflete as MESMAS regras verificadas de verdade em
+                     avatar_storage.py (tipo e tamanho de 2 MiB) -->
                 <div class="form-text text-muted small">Formatos aceitos: JPEG, PNG ou WebP. Máximo de 2 MiB.</div>
                 <div class="d-flex flex-wrap gap-2 mt-3">
+                  <!-- Começa desabilitado ("disabled"): só é liberado
+                       quando um arquivo é escolhido (ver
+                       updateActionAvailability em avatar-settings.js) -->
                   <button id="upload-avatar-btn" type="button" class="btn btn-accent" disabled>
                     Enviar foto
                   </button>
@@ -125,6 +137,10 @@
           </div>
 
           <!-- Zona de Perigo: Exclusão de Conta -->
+          <!-- Botão fora do padrão visual (vermelho) de propósito, para
+               destacar que a ação é destrutiva/irreversível; settings.js
+               ainda pede uma CONFIRMAÇÃO adicional via confirm() antes de
+               chamar DELETE /api/account -->
           <div class="mt-5 pt-4 border-top border-secondary-subtle">
             <h2 class="fs-5 text-danger fw-bold mb-2">Zona de Perigo</h2>
             <p class="text-muted small mb-3">

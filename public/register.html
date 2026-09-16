@@ -48,6 +48,9 @@
               autocomplete="username"
               autofocus
             >
+            <!-- Reflete a mesma regra validada no backend
+                 (ver auth_service.py: 3 a 30 caracteres) — orienta o
+                 usuário ANTES de ele tentar enviar o formulário -->
             <div class="form-text text-muted small">Usado na URL do seu perfil público (3 a 30 caracteres).</div>
           </div>
 
@@ -97,6 +100,9 @@
   <!-- Scripts -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script src="js/file-protocol-guard.js"></script>
+  <!-- register.html e login.html compartilham o MESMO módulo (auth.js),
+       que checa internamente qual dos dois formulários existe na página
+       (#login-form ou #register-form) e liga o comportamento certo -->
   <script type="module" src="js/auth.js"></script>
 </body>
 </html>

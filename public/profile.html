@@ -40,6 +40,9 @@
   </header>
 
   <!-- Conteúdo Principal do Perfil -->
+  <!-- id="profile": profile.js troca este spinner pelo cabeçalho
+       (banner, avatar, bio, stats) e pelas seções de filmes assim que os
+       dados de GET /api/profiles/{username} chegarem -->
   <div class="main-wrapper">
     <main class="page-container">
       <div id="profile">
@@ -52,6 +55,10 @@
   </div>
 
   <!-- Diálogo Modal Acessível para Exibição de Reviews -->
+  <!-- <dialog> é um elemento NATIVO do HTML (não precisa de biblioteca
+       JS externa) que já cuida de acessibilidade básica: bloqueia o
+       fundo, funciona com a tecla Esc, e pode ser aberto/fechado via
+       showModal()/close() (ver profile.js) -->
   <dialog id="review-dialog" class="custom-dialog" aria-labelledby="review-title">
     <div class="dialog-header">
       <div>
