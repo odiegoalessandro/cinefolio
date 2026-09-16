@@ -14,6 +14,7 @@ import { createPageUrl } from './navigation.js';
  */
 
 function initializeProfilePage() {
+  // O username do perfil visitado vem pela querystring, ex: profile.html?user=diego
   const urlParams = new URLSearchParams(window.location.search);
   const username = urlParams.get('user');
 
@@ -23,6 +24,8 @@ function initializeProfilePage() {
   const reviewRating = document.querySelector('#review-rating');
   const reviewContent = document.querySelector('#review-content');
 
+  // Traduz cada chave técnica de seção (que vem do backend, ver
+  // profile_service.py) para um rótulo amigável com emoji
   const sectionLabels = {
     favorites: '⭐ Favoritos',
     recently_watched: '🕒 Assistidos Recentemente',
@@ -42,15 +45,19 @@ function initializeProfilePage() {
     const posterSrc = movieImageUrl(movie.poster_path);
     const movieUrl = createPageUrl('movie.html', { id: movie.tmdb_id });
 
+    // Mostra a nota (★ X) só se ela existir; senão mostra "Sem nota"
     const ratingHtml =
       movie.rating !== null && movie.rating !== undefined
         ? `<span class="poster-rating">★ ${escapeHtml(movie.rating)}</span>`
         : '<span class="text-muted small">Sem nota</span>';
 
+    // Selo de coração só aparece se o filme estiver marcado como favorito
     const favoriteBadge = movie.favorite
       ? '<span class="badge-favorite" title="Favorito">❤️</span>'
       : '';
 
+     // Só mostra o botão "Ler Review" se realmente existir um texto de
+    // review não-vazio (.trim() evita considerar uma review só com espaços)
     const hasReview = movie.review && movie.review.trim().length > 0;
     const reviewBtn = hasReview
       ? `
@@ -65,6 +72,9 @@ function initializeProfilePage() {
         </div>
       `
       : '';
+      // Os dados da review inteira são guardados em atributos "data-*" no
+      // próprio botão: assim, ao clicar, não é preciso fazer uma nova
+      // requisição — o JS só lê de volta esses atributos (ver openReviewDialog)
 
     return `
       <article class="poster-card">
@@ -135,6 +145,8 @@ function initializeProfilePage() {
    */
   function openReviewDialog(button) {
     if (!reviewDialog) return;
+    // Lê os dados que foram guardados nos atributos data-* do botão
+    // clicado (ver renderMovieCard acima)
     const title = button.dataset.title || 'Review do Filme';
     const rating = button.dataset.rating;
     const review = button.dataset.review || '';
@@ -143,8 +155,14 @@ function initializeProfilePage() {
     if (reviewRating) {
       reviewRating.textContent = rating ? `Avaliação: ★ ${rating} / 10` : 'Sem nota atribuída';
     }
+    // Usa textContent (não innerHTML) para o corpo da review: mesmo sendo
+    // um dataset já formado a partir de texto escapado, textContent é
+    // mais seguro por natureza, pois nunca interpreta HTML
     if (reviewContent) reviewContent.textContent = review;
 
+    // showModal() é um método nativo do elemento <dialog> do HTML: abre o
+    // modal de forma acessível (bloqueia interação com o resto da página,
+    // funciona com tecla Esc, etc), sem precisar de biblioteca externa
     reviewDialog.showModal();
   }
 
@@ -152,7 +170,14 @@ function initializeProfilePage() {
   // Eventos do Modal de Review
   // ---------------------------------------------------------------------------
   if (profileContainer) {
+    // "Delegação de eventos": em vez de colocar um listener em CADA botão
+    // "Ler Review" (que nem existem ainda no momento deste código rodar,
+    // pois são criados depois via innerHTML), um único listener fica no
+    // container PAI e verifica se o clique foi dentro de um .review-button
     profileContainer.addEventListener('click', (event) => {
+      // .closest() sobe pela árvore do DOM a partir do elemento clicado,
+      // encontrando o ancestral mais próximo que bate com o seletor —
+      // útil porque o clique pode acontecer num ícone/texto DENTRO do botão
       const button = event.target.closest('.review-button');
       if (button) {
         openReviewDialog(button);
@@ -160,11 +185,15 @@ function initializeProfilePage() {
     });
   }
 
+  // Fecha o modal ao clicar em qualquer botão marcado como "fechar"
   document.querySelectorAll('.dialog-close-btn').forEach((btn) => {
     btn.addEventListener('click', () => reviewDialog?.close());
   });
 
   if (reviewDialog) {
+    // Fecha o modal também ao clicar FORA do conteúdo (no fundo escurecido):
+    // o evento de clique "borbulha" até o próprio <dialog>, e só nesse caso
+    // (target === reviewDialog, e não um filho dele) o clique foi realmente no fundo
     reviewDialog.addEventListener('click', (event) => {
       if (event.target === reviewDialog) {
         reviewDialog.close();
@@ -191,6 +220,9 @@ function initializeProfilePage() {
       const bannerSrc = bannerImageUrl(data.banner_url);
 
       const stats = data.stats || {};
+      // "??" (nullish coalescing) só usa o valor à direita se o da
+      // esquerda for null/undefined — diferente de "||", não trocaria um
+      // "0" válido (0 filmes assistidos) por outro valor
       const watchedCount = escapeHtml(stats.watched_count ?? 0);
       const averageRating = stats.average_rating !== null && stats.average_rating !== undefined
         ? `★ ${escapeHtml(stats.average_rating)}`
@@ -198,6 +230,8 @@ function initializeProfilePage() {
       const reviewCount = escapeHtml(stats.review_count ?? 0);
 
       // Renderiza as seções de filmes
+      // Object.entries transforma o objeto "sections" (ex: {watching: [...],
+      // watched: [...]}) numa lista de pares [chave, valor] para poder usar .map()
       const sectionsHtml = Object.entries(data.sections || {})
         .map(([key, movies]) => {
           const sectionLabel = sectionLabels[key] || escapeHtml(key);

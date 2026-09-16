@@ -21,6 +21,7 @@ function initializeSearchPage() {
     if (!grid) return;
 
     if (!Array.isArray(movies) || movies.length === 0) {
+      // Estado vazio: nenhum resultado encontrado
       grid.innerHTML = `
         <div class="col-12 empty-state">
           <div class="empty-state-icon">🎬</div>
@@ -30,8 +31,13 @@ function initializeSearchPage() {
       return;
     }
 
+    // .map() transforma cada filme num bloco de HTML (card), depois
+    // .join('') concatena tudo numa única string para inserir de uma vez
+    // no innerHTML (mais eficiente que inserir um por um)
     grid.innerHTML = movies
       .map((movie) => {
+        // TUDO que vem da API/usuário passa por escapeHtml antes de
+        // entrar no template, protegendo contra XSS
         const title = escapeHtml(movie.title);
         const year = escapeHtml(movie.release_year || 'Ano n/d');
         const posterUrl = movieImageUrl(movie.poster_path);
@@ -105,6 +111,8 @@ function initializeSearchPage() {
       showLoading('Consultando catálogo da TMDB...');
 
       try {
+        // encodeURIComponent escapa caracteres especiais (espaços,
+        // acentos, "&") para a busca funcionar corretamente na URL
         const response = await api.get(
           `/api/movies/search?q=${encodeURIComponent(query)}`
         );
@@ -118,6 +126,8 @@ function initializeSearchPage() {
   // ---------------------------------------------------------------------------
   // Carregamento Inicial de Filmes Populares
   // ---------------------------------------------------------------------------
+  // Ao abrir a página (sem nenhuma busca ainda feita), já carrega os
+  // filmes populares como conteúdo inicial da grade, em vez de deixá-la vazia
   showLoading('Carregando destaques do catálogo...');
   api.get('/api/movies/popular')
     .then((data) => {

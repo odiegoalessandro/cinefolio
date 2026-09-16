@@ -8,6 +8,8 @@ import { initializeNavigation } from './nav.js';
  */
 
 function initializeMoviePage() {
+  // O ID do filme (tmdb_id) vem pela querystring da URL, ex:
+  // movie.html?id=550 -> URLSearchParams extrai o valor "550"
   const urlParams = new URLSearchParams(window.location.search);
   const movieId = urlParams.get('id');
 
@@ -46,6 +48,8 @@ function initializeMoviePage() {
    * Carrega e renderiza os dados do filme a partir do backend.
    */
   async function loadMovieDetails() {
+    // Valida o ID ANTES de fazer qualquer requisição: precisa existir e
+    // ser só dígitos (ex: bloqueia "abc" ou string vazia)
     if (!movieId || !/^\d+$/.test(movieId)) {
       showDetailMessage('Por favor, selecione um filme válido pela busca da página inicial.');
       if (movieForm) movieForm.classList.add('d-none');
@@ -65,6 +69,8 @@ function initializeMoviePage() {
       const posterSrc = movieImageUrl(movie.poster_path);
       const backdropSrc = movieImageUrl(movie.backdrop_path);
 
+      // Monta as "etiquetas" de gênero (ex: "Ação", "Drama"), só se
+      // existirem gêneros na resposta
       const genresHtml = Array.isArray(movie.genres) && movie.genres.length > 0
         ? movie.genres.map((g) => `<span class="genre-tag">${escapeHtml(g.name)}</span>`).join('')
         : '';
@@ -87,8 +93,12 @@ function initializeMoviePage() {
       `;
 
       // Preenche os campos do formulário se o filme já estiver no perfil
+      // (movie.user_status só vem preenchido se o usuário estiver logado
+      // E já tiver salvo esse filme antes — ver movie_controller.py)
       if (movie.user_status && movieForm) {
         const status = movie.user_status;
+        // Cada campo é checado individualmente com "if (movieForm.elements[...])"
+        // por segurança, caso algum input não exista no HTML por algum motivo
         if (movieForm.elements['status']) movieForm.elements['status'].value = status.status || 'WATCHING';
         if (movieForm.elements['rating']) movieForm.elements['rating'].value = status.rating !== null ? status.rating : '';
         if (movieForm.elements['watched_at']) movieForm.elements['watched_at'].value = status.watched_at || '';
@@ -96,6 +106,7 @@ function initializeMoviePage() {
         if (movieForm.elements['favorite']) movieForm.elements['favorite'].checked = Boolean(status.favorite);
 
         if (removeMovieBtn) {
+          // Só mostra o botão "Remover do perfil" se o filme já estiver salvo
           removeMovieBtn.classList.remove('d-none');
         }
       }
@@ -120,6 +131,9 @@ function initializeMoviePage() {
       const formData = new FormData(movieForm);
       const payload = {
         status: formData.get('status'),
+        // Um checkbox HTML só aparece no FormData quando MARCADO, com
+        // valor "on"; por isso a comparação explícita, em vez de
+        // simplesmente pegar o valor bruto
         favorite: formData.get('favorite') === 'on',
         rating: formData.get('rating') ? Number(formData.get('rating')) : null,
         review: (formData.get('review') || '').trim() || null,
@@ -164,7 +178,7 @@ function initializeMoviePage() {
       try {
         await api.delete(`/api/movies/${movieId}/profile`);
         showFormMessage('Filme removido do seu perfil com sucesso.', false);
-        movieForm.reset();
+        movieForm.reset();  // limpa todos os campos do formulário de volta ao estado inicial
         removeMovieBtn.classList.add('d-none');
       } catch (error) {
         showFormMessage(error.message, true);

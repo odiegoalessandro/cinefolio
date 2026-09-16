@@ -1,9 +1,19 @@
+// Este script roda ANTES de tudo (é carregado como o primeiro <script> em
+// cada página HTML, sem "type=module") e existe para evitar uma confusão
+// comum: o usuário abrindo o arquivo .html diretamente no navegador
+// (duplo clique) em vez de acessar via http://127.0.0.1:8000.
+
 (() => {
+  // window.location.protocol é "file:" quando a página foi aberta como um
+  // arquivo local, e não através de um servidor HTTP real
   if (window.location.protocol !== 'file:') {
-    return;
+    return; // tudo certo: a página está sendo servida via HTTP, segue normalmente
   }
 
+  // Espera o HTML carregar completamente antes de substituir o conteúdo
   document.addEventListener('DOMContentLoaded', () => {
+    // Substitui TODO o corpo da página por uma mensagem de aviso,
+    // explicando como rodar o projeto corretamente
     document.body.innerHTML = `
       <main class="form-center-page">
         <div class="panel-card text-center">
