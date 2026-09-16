@@ -24,11 +24,21 @@ def create_router(
     avatar_mutation_coordinator,
     tmdb_token: str | None = None,
 ) -> Router:
-    """Monta o grafo de dependências e devolve um roteador pronto para despachar."""
+    """Monta o grafo de dependências e devolve um roteador pronto para despachar.
+
+    Esta função é o ponto único de "Injeção de Dependência" do projeto:
+    aqui é decidido QUEM usa QUEM (ex: o AuthController usa o AuthService,
+    que usa o UserRepository, que usa a conexão do banco). Assim, cada
+    classe recebe suas dependências prontas, sem precisar criá-las sozinha
+    — o que também facilita muito os testes (basta passar versões "falsas"
+    dessas dependências).
+    """
+    # Camada de repositórios (acesso a dados)
     user_repository = UserRepository(connection)
     movie_repository = MovieRepository(connection)
     user_movie_repository = UserMovieRepository(connection)
 
+    # Camada de serviços (regras de negócio), construída sobre os repositórios
     auth_service = AuthService(user_repository)
     profile_service = ProfileService(user_repository, user_movie_repository)
     tmdb_service = TmdbService(token=tmdb_token)
@@ -38,6 +48,8 @@ def create_router(
         avatar_mutation_coordinator,
     )
 
+    # Camada de controllers, construída sobre os services, e finalmente
+    # entregue ao Router — que é o único objeto que o http_handler enxerga
     return Router(
         auth_controller=AuthController(auth_service),
         movie_controller=MovieController(
@@ -48,5 +60,7 @@ def create_router(
         profile_controller=ProfileController(profile_service, user_repository),
         avatar_controller=AvatarController(avatar_service),
         account_controller=AccountController(avatar_service),
+        # current_user_resolver: passa a FUNÇÃO (não o resultado dela),
+        # para o Router poder chamá-la a cada requisição, com o token daquela requisição
         current_user_resolver=auth_service.current_user,
     )
