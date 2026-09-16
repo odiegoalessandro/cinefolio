@@ -6,6 +6,9 @@ from server.serializers.user import sanitize_user
 def validate_profile_payload(data: dict) -> dict:
     """Valida os dados recebidos para atualização cadastral do perfil."""
     if "avatar_url" in data:
+        # O avatar tem um fluxo de upload próprio (AvatarController):
+        # não pode ser setado diretamente por texto aqui, senão o usuário
+        # poderia colocar qualquer URL externa driblando as validações de imagem
         raise ValueError("Use o envio de foto para alterar o avatar.")
 
     fields = ("display_name", "bio", "banner_url")
@@ -46,6 +49,7 @@ class ProfileController:
         """Obtém o perfil público formatado do usuário especificado."""
         profile = self.profile_service.public_profile(username)
         if not profile:
+            # KeyError é convertido em HTTP 404 pelo errors.py
             raise KeyError("Perfil não encontrado.")
         return {"profile": profile}
 
@@ -56,7 +60,7 @@ class ProfileController:
         validated = validate_profile_payload(payload)
         updated_user = self.user_repository.update_profile(
             user_id=current_user["id"],
-            **validated,
+            **validated,    # desempacota display_name, bio e banner_url como argumentos nomeados
         )
         return {"user": sanitize_user(updated_user)}
 

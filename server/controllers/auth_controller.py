@@ -4,7 +4,13 @@ from server.serializers.user import sanitize_user
 
 
 class AuthController:
-    """Controlador de autenticação."""
+    """Controlador de autenticação.
+
+    Um "Controller" é a camada que recebe os dados já extraídos da
+    requisição HTTP (payload, usuário atual, token) e decide o que fazer,
+    delegando as regras de negócio para o Service. Ele não sabe nada sobre
+    sockets/HTTP puro — isso fica no http_handler/router.
+    """
 
     def __init__(self, auth_service):
         self.auth_service = auth_service
@@ -20,6 +26,7 @@ class AuthController:
             display_name=display_name,
             password=password,
         )
+        # sanitize_user remove o password_hash antes de devolver ao cliente
         return {"user": sanitize_user(created_user)}
 
     def login(self, payload: dict) -> tuple[dict, str]:
@@ -28,6 +35,9 @@ class AuthController:
         password = payload.get("password", "")
 
         user, token = self.auth_service.login(username=username, password=password)
+        # Retorna uma tupla (corpo da resposta, token) porque o token
+        # precisa ser usado por quem chamou este método para montar o
+        # cookie de sessão (Set-Cookie) — ele não faz parte do JSON de resposta
         return {"user": sanitize_user(user)}, token
 
     def logout(self, token: str) -> dict:
@@ -38,5 +48,6 @@ class AuthController:
     def me(self, current_user: dict) -> dict:
         """Retorna os dados do usuário atualmente autenticado."""
         if not current_user:
+            # PermissionError é convertido em HTTP 401 pelo errors.py
             raise PermissionError("Autenticação necessária.")
         return {"user": sanitize_user(current_user)}

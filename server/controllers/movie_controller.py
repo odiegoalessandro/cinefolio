@@ -8,6 +8,8 @@ def validate_movie_payload(data: dict) -> dict:
     allowed_fields = {"status", "rating", "review", "favorite", "watched_at"}
     extra_fields = set(data.keys()) - allowed_fields
 
+    # Rejeita qualquer campo extra não esperado (ex: alguém tentando
+    # injetar "user_id" no corpo da requisição) e exige que "status" venha
     if extra_fields or "status" not in data:
         raise ValueError("Dados de filme inválidos.")
 
@@ -24,7 +26,7 @@ def validate_movie_payload(data: dict) -> dict:
         except ValueError:
             raise ValueError("A nota deve ser um número entre 0 e 10.")
     else:
-        rating = None
+        rating = None   # nota é opcional
 
     review = data.get("review")
     if review is not None:
@@ -32,6 +34,7 @@ def validate_movie_payload(data: dict) -> dict:
         if len(review) > 5000:
             raise ValueError("A review não pode exceder 5000 caracteres.")
         if not review:
+            # review em branco (só espaços) é tratado como "sem review"
             review = None
 
     favorite = bool(data.get("favorite", False))
@@ -78,10 +81,14 @@ class MovieController:
 
     def details(self, tmdb_id: str, current_user: dict = None) -> dict:
         """Retorna os detalhes de um filme e, caso o usuário esteja logado, o status salvo."""
+        # Busca sempre dados atualizados direto da TMDB (não do cache local)
         movie_data = self.tmdb_service.details(tmdb_id)
 
         user_status = None
         if current_user:
+            # Só faz sentido procurar "o que o usuário salvou sobre esse
+            # filme" se o filme já existir na tabela local `movies`
+            # (ele só é gravado lá quando alguém o salva no perfil)
             local_movie = self.movie_repository.get_by_tmdb_id(movie_data["tmdb_id"])
             if local_movie:
                 saved = self.user_movie_repository.get_by_user_and_movie(
@@ -97,6 +104,8 @@ class MovieController:
                         "watched_at": saved["watched_at"],
                     }
 
+        # Enriquece a resposta da TMDB com o status pessoal do usuário
+        # (ou None, se ele não estiver logado ou não tiver salvo o filme)
         movie_data["user_status"] = user_status
         return {"movie": movie_data}
 
@@ -106,6 +115,7 @@ class MovieController:
             raise PermissionError("Autenticação necessária.")
 
         # Obtém metadados da TMDB e garante inserção na tabela `movies`
+        # (upsert: se o filme já existe localmente, só atualiza os dados)
         movie_details = self.tmdb_service.details(tmdb_id)
         local_movie = self.movie_repository.upsert(movie_details)
 
@@ -127,6 +137,9 @@ class MovieController:
 
         local_movie = self.movie_repository.get_by_tmdb_id(int(tmdb_id))
         if not local_movie:
+            # Filme nem existe no catálogo local: não há o que remover,
+            # mas isso não é um erro (idempotência: remover algo que já
+            # não existe "funciona" e retorna removed=False)
             return {"removed": False}
 
         removed = self.user_movie_repository.remove(

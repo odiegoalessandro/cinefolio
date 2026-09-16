@@ -23,5 +23,7 @@ class AvatarController:
 
     @staticmethod
     def _require_current_user(current_user: dict) -> None:
+        # Método auxiliar reaproveitado pelos dois métodos acima para não
+        # repetir a mesma checagem de autenticação duas vezes
         if not current_user:
             raise PermissionError("Autenticação necessária.")
