@@ -9,6 +9,9 @@ async function loadNavigationModule() {
   }
 }
 
+
+// Simula um "document" que nunca encontra nenhum elemento — usado para
+// testar o caminho onde o usuário NÃO está logado (sem manipular DOM real)
 function emptyDocument() {
   return {
     querySelector() {
@@ -22,12 +25,16 @@ function emptyDocument() {
 
 test('authentication failure resolves as visitor navigation', async () => {
   const { initializeNavigation } = await loadNavigationModule();
+  // Simula a chamada a /api/auth/me falhando (usuário não logado)
   const apiClient = {
     async get() {
       throw new Error('Sem sessão');
     },
   };
 
+  // assert.doesNotReject confirma que initializeNavigation trata esse
+  // erro internamente (com o try/catch visto em nav.js) e NÃO deixa a
+  // exceção "vazar" para quem chamou
   await assert.doesNotReject(() =>
     initializeNavigation({
       apiClient,
@@ -55,6 +62,9 @@ test('authenticated navigation escapes the display name', async () => {
       return {
         user: {
           username: 'diego',
+          // display_name propositalmente contém caracteres HTML perigosos,
+          // para testar se realmente passam por escapeHtml antes de irem
+          // para o innerHTML do menu
           display_name: '<Diego>',
           avatar_url: '',
         },
@@ -74,6 +84,9 @@ test('authenticated navigation escapes the display name', async () => {
     authLink.href,
     'https://cinefolio.test/profile.html?user=diego'
   );
+
+  // Confirma que o HTML "cru" e perigoso NUNCA aparece no innerHTML final
   assert.doesNotMatch(container.innerHTML, /<Diego>/);
+  // E que a versão ESCAPADA (segura) é o que realmente aparece
   assert.match(container.innerHTML, /&lt;Diego&gt;/);
 });

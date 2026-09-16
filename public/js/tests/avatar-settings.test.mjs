@@ -9,6 +9,9 @@ async function loadAvatarSettingsModule() {
   }
 }
 
+// Fabrica um elemento de DOM "falso" mínimo, com suporte a
+// addEventListener/trigger, para simular inputs, botões e imagens sem
+// precisar de um navegador de verdade
 function control() {
   const listeners = new Map();
   return {
@@ -21,6 +24,8 @@ function control() {
       listeners.set(eventName, listener);
     },
     async trigger(eventName) {
+      // Simula o comportamento real do navegador: um botão desabilitado
+      // não dispara o evento de clique
       if (eventName === 'click' && this.disabled) {
         return undefined;
       }
@@ -46,6 +51,8 @@ test('selecting a local file enables upload and previews its object URL', async 
   controls.fileInput.files = [file];
   const urlRef = {
     createObjectURL(receivedFile) {
+      // Confirma que o arquivo passado para createObjectURL é exatamente
+      // o mesmo que foi "selecionado" no input
       assert.equal(receivedFile, file);
       return 'blob:avatar-preview';
     },
@@ -85,9 +92,13 @@ test('upload sends only the avatar file and renders the returned local URL', asy
   await controls.uploadButton.trigger('click');
 
   assert.equal(calls[0].path, '/api/profile/avatar');
+  // Confirma que SÓ o campo "avatar" foi enviado no FormData (nenhum
+  // outro campo extra que pudesse comprometer a identidade do upload)
   const uploadedFile = calls[0].formData.get('avatar');
   assert.equal(uploadedFile.type, 'image/png');
   assert.equal(await uploadedFile.text(), 'image');
+  // Confirma que a prévia foi atualizada com a URL REAL vinda do
+  // servidor (não mais a URL temporária local de preview)
   assert.equal(controls.preview.src, '/uploads/avatars/updated.png');
   assert.equal(controls.fileInput.value, '');
   assert.equal(controls.uploadButton.disabled, true);
@@ -117,13 +128,19 @@ test('removing an avatar restores the default preview after the API succeeds', a
 });
 
 test('an upload blocks avatar removal until its request completes', async () => {
+  // Este teste verifica a trava "isOperationInProgress" de
+  // avatar-settings.js: enquanto um upload está em andamento, remover
+  // não deve fazer NADA (nem chamar a API)
   const { initializeAvatarSettings } = await loadAvatarSettingsModule();
   const controls = createControls('/uploads/avatars/current.png');
   controls.fileInput.files = [new Blob(['image'], { type: 'image/png' })];
-  let resolveUpload;
+  let resolveUpload;   // guarda a função que "resolve" a Promise do upload manualmente
   let removeCalls = 0;
   const apiClient = {
     putForm() {
+      // Retorna uma Promise que fica "pendurada" (nunca resolve
+      // sozinha), até o teste chamar resolveUpload() explicitamente —
+      // isso simula uma requisição de rede lenta/em andamento
       return new Promise((resolve) => {
         resolveUpload = resolve;
       });
@@ -140,13 +157,19 @@ test('an upload blocks avatar removal until its request completes', async () => 
     urlRef: { createObjectURL: () => 'blob:selected', revokeObjectURL() {} },
   });
   await controls.fileInput.trigger('change');
-  const upload = controls.uploadButton.trigger('click');
-  await controls.removeButton.trigger('click');
+  const upload = controls.uploadButton.trigger('click');  // inicia o upload, mas NÃO espera terminar
+  await controls.removeButton.trigger('click');   // tenta remover enquanto o upload ainda está "no ar"
+
 
   assert.equal(controls.uploadButton.disabled, true);
   assert.equal(controls.removeButton.disabled, true);
+  // O ponto principal do teste: a remoção não deve ter chamado a API
+  // de forma alguma, pois o botão estava desabilitado
   assert.equal(removeCalls, 0);
 
+  // Só agora "libera" o upload para terminar de verdade, e espera a
+  // Promise dele encerrar antes do teste acabar (evita vazar uma Promise
+  // pendente entre testes)
   resolveUpload({ user: { avatar_url: '/uploads/avatars/updated.png' } });
   await upload;
 });
