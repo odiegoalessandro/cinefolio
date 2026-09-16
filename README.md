@@ -213,7 +213,7 @@ cinefolio/
 ### 7.1. Pré-requisitos
 - **Python 3.10** ou superior instalado.
 - **Node.js 22** ou superior, somente para executar os testes JavaScript.
-- Chave/Token de leitura da API TMDB (gratuita em [themoviedb.org](https://www.themoviedb.org/)).
+- Chave/Token de leitura(read access) da API TMDB (gratuita em [themoviedb.org](https://www.themoviedb.org/)).
 
 ### 7.2. Passo a Passo de Configuração
 
@@ -222,6 +222,11 @@ cinefolio/
    git clone https://github.com/odiegoalessandro/cinefolio.git
    cd cinefolio
    ```
+   1.1. **caso esteja usando vs code**
+      ```bash
+      # para abrir a visualização dos arquivos basta escrever
+      code -r .
+      ```
 
 2. **Configurar as Variáveis de Ambiente:**
    Copie o arquivo `.env.example` para `.env`:
@@ -275,15 +280,36 @@ node --test public/js/tests/*.test.mjs
 ## 9. Evidências Visuais e Roteiro de Demonstração (Peer Review)
 
 Para a dinâmica de avaliação por pares (**Peer Review**), recomenda-se seguir o seguinte fluxo:
-1. **Cadastro (`/register.html`):** Crie uma conta informando username, nome e senha com 8+ caracteres.
-2. **Login (`/login.html`):** Autentique-se com a conta recém-criada.
-3. **Catálogo & Busca (`/index.html`):** Visualize os filmes populares ou digite o nome de um filme na barra de pesquisa.
-4. **Classificação & CRUD (`/movie.html?id=...`):**
-   - Acesse um filme, marque status como `Assistido`, atribua uma nota (ex: `9.5`), selecione data e escreva um review.
-   - Marque a opção `Favorito` e clique em `Salvar no Perfil`.
-5. **Perfil Público (`/profile.html?user=...`):**
-   - Acesse o perfil e visualize os contadores atualizados (assistidos, média de notas, reviews).
-   - Localize o filme na seção de `Favoritos` e clique em `Ler Review` para testar o modal interativo.
-6. **Configurações (`/settings.html`):**
-   - Altere a bio e insira URLs personalizadas de avatar e banner.
-   - Salve e confira o visual atualizado no perfil público.
+
+### 1. Cadastro (`/register.html`)
+Crie uma conta informando username, nome e senha com 8+ caracteres.
+
+![Tela de Cadastro](./public/assets/Cadastro.png)
+
+### 2. Login (`/login.html`)
+Autentique-se com a conta recém-criada.
+
+![Tela de Login](./public/assets/Login.png)
+
+### 3. Catálogo & Busca (`/index.html`)
+Visualize os filmes populares ou digite o nome de um filme na barra de pesquisa.
+
+![Catálogo e Busca](./public/assets/catalogo.png)
+
+### 4. Classificação & CRUD (`/movie.html?id=...`)
+- Acesse um filme, marque status como `Assistido`, atribua uma nota (ex: `9.5`), selecione data e escreva um review.
+- Marque a opção `Favorito` e clique em `Salvar no Perfil`.
+
+![Classificação e Review](./public/assets/ClassificacaoeCrud.png)
+
+### 5. Perfil Público (`/profile.html?user=...`)
+- Acesse o perfil e visualize os contadores atualizados (assistidos, média de notas, reviews).
+- Localize o filme na seção de `Favoritos` e clique em `Ler Review` para testar o modal interativo.
+
+![Perfil Público](./public/assets/perfilPublico.png)
+
+### 6. Configurações (`/settings.html`)
+- Altere a bio e insira URLs personalizadas de avatar e banner.
+- Salve e confira o visual atualizado no perfil público.
+
+![Configurações](./public/assets/Configuracoes.png)
