@@ -17,7 +17,14 @@ class MovieRepository:
         ).fetchone()
 
     def upsert(self, movie: dict):
-        """Insere ou atualiza os metadados do filme no catálogo local."""
+        """Insere ou atualiza os metadados do filme no catálogo local.
+
+        "upsert" = UPDATE + INSERT: tenta inserir um filme novo; se já existir
+        um filme com o mesmo tmdb_id (ver UNIQUE no schema.sql), atualiza os
+        dados existentes em vez de gerar um erro de duplicidade.
+        Isso mantém o "cache" local de filmes sempre atualizado com os
+        dados mais recentes vindos da API do TMDB.
+        """
         self.connection.execute(
             """
             INSERT INTO movies (
@@ -37,6 +44,11 @@ class MovieRepository:
                 poster_path = excluded.poster_path,
                 backdrop_path = excluded.backdrop_path
             """,
+            # "excluded" é uma palavra-chave especial do SQLite: refere-se aos
+            # valores que TENTARAM ser inseridos (o novo registro), usados
+            # aqui para atualizar o registro já existente em caso de conflito.
+            # Note que "created_at" não é atualizado no ON CONFLICT — a data
+            # de criação original do filme é preservada.
             (
                 movie["tmdb_id"],
                 movie["title"],

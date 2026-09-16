@@ -21,6 +21,8 @@ class UserMovieRepository:
         watched_at: Optional[str] = None,
     ):
         """Insere ou atualiza o status/avaliação de um filme no perfil do usuário."""
+        # Mesmo timestamp usado em created_at (se for um insert novo) e
+        # updated_at, para manter os dois valores sincronizados na criação
         timestamp = now_iso()
         self.connection.execute(
             """
@@ -44,13 +46,15 @@ class UserMovieRepository:
                 watched_at = excluded.watched_at,
                 updated_at = excluded.updated_at
             """,
+            # No conflito (usuário já tinha registro para esse filme),
+            # "created_at" NÃO é sobrescrito — só updated_at avança.
             (
                 user_id,
                 movie_id,
                 status,
                 rating,
                 review,
-                int(bool(favorite)),
+                int(bool(favorite)),    # SQLite não tem tipo boolean nativo: vira 0 ou 1
                 watched_at,
                 timestamp,
                 timestamp,
@@ -65,10 +69,14 @@ class UserMovieRepository:
             (user_id, movie_id),
         )
         self.connection.commit()
+        # rowcount > 0 confirma se algo realmente foi apagado (permite ao
+        # service, por exemplo, retornar 404 se nada existia para remover)
         return cursor.rowcount > 0
 
     def get_by_user_and_movie(self, user_id: int, movie_id: int):
         """Retorna o registro específico de um filme salvo por um usuário."""
+        # JOIN junta os dados do filme (tabela movies) com os dados da
+        # relação usuário-filme (status, nota, review) em uma única linha
         return self.connection.execute(
             """
             SELECT movies.*,
@@ -114,6 +122,10 @@ class UserMovieRepository:
         """
         parameters = [user_id]
 
+        # A query é construída dinamicamente: cada filtro só é adicionado
+        # ao SQL se o parâmetro correspondente foi de fato informado.
+        # Isso evita ter que escrever uma consulta separada para cada
+        # combinação possível de filtros (status, favorito, ambos, nenhum).
         if status:
             query += " AND user_movies.status = ?"
             parameters.append(status)
@@ -144,6 +156,10 @@ class UserMovieRepository:
 
     def statistics(self, user_id: int):
         """Calcula estatísticas agregadas (filmes assistidos, média de avaliação, reviews)."""
+        # FILTER (WHERE ...) é uma extensão SQL que permite aplicar um filtro
+        # dentro de uma função agregada específica — assim COUNT(*), por
+        # exemplo, conta só as linhas que batem com a condição do FILTER,
+        # tudo em uma única consulta (sem precisar de 3 SELECTs separados)
         return self.connection.execute(
             """
             SELECT

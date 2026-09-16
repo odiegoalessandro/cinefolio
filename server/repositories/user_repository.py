@@ -5,14 +5,21 @@ from datetime import datetime, timezone
 
 def now_iso() -> str:
     """Retorna a data e hora UTC atual em formato ISO 8601 sem microssegundos."""
+    # timezone.utc garante que o horário salvo no banco não depende do fuso
+    # horário do servidor (evita bugs quando o servidor roda em outro país/fuso)
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
 class UserRepository:
-    """Camada de persistência para as tabelas `users` e `sessions`."""
+    """Camada de persistência para as tabelas `users` e `sessions`.
+
+    Um "Repository" é a camada responsável só por conversar com o banco
+    (SQL puro). Ele não valida regras de negócio nem decide o que fazer
+    com os dados — isso é papel da camada de "service", que fica acima dele.
+    """
 
     def __init__(self, connection):
-        self.connection = connection
+        self.connection = connection    # conexão SQLite recebida de fora (injeção de dependência)
 
     # -------------------------------------------------------------------------
     # Operações da entidade Users
@@ -25,9 +32,12 @@ class UserRepository:
             INSERT INTO users (username, display_name, password_hash, created_at)
             VALUES (?, ?, ?, ?)
             """,
+            # "?" são placeholders: o driver do SQLite escapa os valores
+            # automaticamente, evitando ataques de SQL Injection
             (username, display_name, password_hash, now_iso()),
         )
         self.connection.commit()
+        # cursor.lastrowid = id gerado automaticamente (AUTOINCREMENT) pelo INSERT acima
         return self.get_by_id(cursor.lastrowid)
 
     def get_by_id(self, user_id: int):
@@ -52,6 +62,8 @@ class UserRepository:
         banner_url: str,
     ):
         """Atualiza os dados textuais de um usuário sem alterar seu avatar."""
+        # O avatar é atualizado em um método separado (update_avatar_url)
+        # porque o upload de foto segue um fluxo diferente do resto do perfil
         self.connection.execute(
             """
             UPDATE users
@@ -75,7 +87,13 @@ class UserRepository:
         return self.get_by_id(user_id)
 
     def avatar_url_is_exclusive_to_user(self, user_id: int, avatar_url: str) -> bool:
-        """Confirma que uma URL local pertence somente ao usuário que a remove."""
+        """Confirma que uma URL local pertence somente ao usuário que a remove.
+
+        Isso é usado antes de apagar o arquivo físico de um avatar antigo:
+        se por algum motivo outro usuário estivesse usando a MESMA url
+        (situação rara, mas possível em edge cases), o arquivo não pode
+        ser apagado do disco, senão quebraria o avatar de outra pessoa.
+        """
         if not avatar_url:
             return False
 
@@ -83,10 +101,13 @@ class UserRepository:
             "SELECT 1 FROM users WHERE avatar_url = ? AND id != ? LIMIT 1",
             (avatar_url, user_id),
         ).fetchone()
-        return shared is None
+        return shared is None   # None = ninguém mais usa essa URL = é exclusiva
 
     def delete(self, user_id: int):
         """Remove o usuário e todos os seus dados associados em cascata."""
+        # Graças ao "ON DELETE CASCADE" definido no schema.sql, apagar o
+        # usuário também apaga automaticamente suas sessões e seus
+        # registros em user_movies — não é preciso apagar cada um manualmente.
         self.connection.execute("DELETE FROM users WHERE id = ?", (user_id,))
         self.connection.commit()
 
@@ -107,6 +128,9 @@ class UserRepository:
 
     def get_session_user(self, token_hash: str, current_time: str):
         """Recupera o usuário associado a um token de sessão válido e não expirado."""
+        # O JOIN busca o usuário dono do token em uma única consulta,
+        # e a condição "expires_at > current_time" já filtra sessões vencidas
+        # (então uma sessão expirada simplesmente não retorna nenhum usuário)   
         return self.connection.execute(
             """
             SELECT users.*
@@ -127,7 +151,11 @@ class UserRepository:
         self.connection.commit()
 
     def delete_expired_sessions(self, current_time: str):
-        """Remove todas as sessões cujo prazo de validade já expirou."""
+        """Remove todas as sessões cujo prazo de validade já expirou.
+
+        Serve como uma "limpeza" (garbage collection) da tabela de sessões,
+        evitando que ela cresça indefinidamente com tokens já inválidos.
+        """
         self.connection.execute(
             "DELETE FROM sessions WHERE expires_at <= ?",
             (current_time,),
