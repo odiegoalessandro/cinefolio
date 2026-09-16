@@ -5,6 +5,10 @@ import hmac
 import secrets
 from datetime import datetime, timedelta, timezone
 
+
+# Número de iterações do algoritmo PBKDF2. Quanto maior, mais lento e mais
+# caro fica tentar "quebrar" o hash por força bruta (é o valor recomendado
+# atualmente pela OWASP para PBKDF2-HMAC-SHA256).
 ITERATIONS = 310_000
 
 
@@ -15,8 +19,15 @@ def now_iso() -> str:
 
 def hash_password(password: str) -> str:
     """Gera um hash PBKDF2-HMAC-SHA256 seguro com salt individual de 16 bytes."""
+    # O "salt" é um valor aleatório único por senha: garante que duas pessoas
+    # com a mesma senha gerem hashes diferentes, e impede ataques com
+    # tabelas pré-computadas (rainbow tables).
     salt = secrets.token_bytes(16)
     digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, ITERATIONS)
+    # O hash final guarda tudo que é preciso para verificar depois:
+    # algoritmo, número de iterações, salt e o resultado — assim, mesmo que
+    # o valor de ITERATIONS mude no futuro, senhas antigas continuam
+    # verificáveis corretamente.
     return f"pbkdf2_sha256${ITERATIONS}${salt.hex()}${digest.hex()}"
 
 
@@ -26,14 +37,20 @@ def verify_password(password: str, stored_hash: str) -> bool:
         algorithm, iterations, salt_hex, expected_hex = stored_hash.split("$")
         if algorithm != "pbkdf2_sha256":
             return False
+        # Recalcula o hash usando a MESMA senha informada agora, mas com o
+        # salt e o número de iterações que foram salvos no cadastro
         actual = hashlib.pbkdf2_hmac(
             "sha256",
             password.encode("utf-8"),
             bytes.fromhex(salt_hex),
             int(iterations),
         )
+        # hmac.compare_digest faz uma comparação em "tempo constante":
+        # evita vazar informação sobre a senha através do tempo que a
+        # comparação leva (proteção contra timing attack), diferente de um "=="
         return hmac.compare_digest(actual.hex(), expected_hex)
     except (ValueError, TypeError):
+        # Hash salvo em formato corrompido/inesperado -> trata como senha inválida
         return False
 
 
@@ -45,6 +62,8 @@ class AuthService:
 
     def register(self, username: str, display_name: str, password: str):
         """Valida e cadastra um novo usuário no sistema."""
+        # Normaliza username (minúsculo, sem espaço nas pontas) para evitar
+        # duplicidade tipo "Joao" e "joao" sendo tratados como usuários diferentes
         username = (username or "").strip().lower()
         display_name = (display_name or "").strip()
         password = password or ""
@@ -61,6 +80,8 @@ class AuthService:
         if self.users.get_by_username(username):
             raise ValueError("Este nome de usuário já está em uso.")
 
+        # A senha em texto puro só existe até esta linha: a partir daqui,
+        # só o hash é armazenado/manipulado
         return self.users.create(username, display_name, hash_password(password))
 
     def login(self, username: str, password: str):
@@ -70,13 +91,22 @@ class AuthService:
 
         user = self.users.get_by_username(username)
         if not user or not verify_password(password, user["password_hash"]):
+            # Mensagem de erro genérica de propósito: não revela se foi o
+            # username que não existe ou a senha que está errada, evitando
+            # que um atacante descubra quais usernames são válidos
             raise ValueError("Usuário ou senha inválidos.")
 
+        # secrets.token_urlsafe gera um token aleatório criptograficamente seguro
         token = secrets.token_urlsafe(32)
+        # Só o HASH do token é salvo no banco (nunca o token em si) — assim,
+        # mesmo que o banco vaze, ninguém consegue reconstruir os tokens
+        # válidos e se passar pelos usuários logados
         token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
         expires_at = (datetime.now(timezone.utc) + timedelta(days=7)).replace(microsecond=0).isoformat()
 
         self.users.create_session(user["id"], token_hash, expires_at)
+        # O token "puro" é retornado só aqui, uma única vez, para virar o
+        # cookie enviado ao navegador do cliente
         return user, token
 
     def current_user(self, token: str):

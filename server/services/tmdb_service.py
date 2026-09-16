@@ -6,20 +6,30 @@ from server.clients.tmdb_client import TmdbClient
 
 
 class TmdbService:
-    """Valida e normaliza dados de catálogo obtidos da TMDB."""
+    """Valida e normaliza dados de catálogo obtidos da TMDB.
+
+    Esta camada fica entre os controllers e o TmdbClient (que só sabe
+    fazer requisições HTTP puras): aqui entram validação de entrada e a
+    padronização do formato de dados, para o resto do sistema não
+    precisar conhecer os detalhes de como a API externa responde.
+    """
 
     def __init__(self, token: str = None, opener=urlopen):
+        # "opener" pode ser substituído em testes (ao invés de urlopen real)
+        # para simular respostas da API sem fazer requisições de verdade
         self.client = TmdbClient(token=token, opener=opener)
 
     @staticmethod
     def normalize_movie(movie: dict) -> dict:
         """Padroniza a estrutura de dados de filme retornada pela TMDB."""
         release_date = movie.get("release_date") or ""
-        year_str = release_date[:4]
+        year_str = release_date[:4] # os 4 primeiros caracteres de "AAAA-MM-DD" = o ano
         release_year = int(year_str) if year_str.isdigit() else None
 
         return {
             "tmdb_id": movie["id"],
+            # alguns endpoints da TMDB usam "title" (filmes) e outros "name"
+            # (séries); aqui cobre os dois casos com um valor de fallback
             "title": movie.get("title") or movie.get("name") or "Sem título",
             "original_title": movie.get("original_title") or "",
             "release_year": release_year,

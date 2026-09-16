@@ -7,8 +7,14 @@ from pathlib import Path
 from uuid import uuid4
 
 
-MAX_AVATAR_BYTES = 2 * 1024 * 1024
-AVATAR_URL_PREFIX = "/uploads/avatars/"
+MAX_AVATAR_BYTES = 2 * 1024 * 1024  # limite de 2 MiB por foto
+AVATAR_URL_PREFIX = "/uploads/avatars/" # prefixo de URL usado para servir os avatares
+
+# "Assinatura de arquivo" (magic bytes): os primeiros bytes de um arquivo
+# identificam seu formato real, independente da extensão ou do header
+# Content-Type informado (que podem ser falsificados pelo cliente).
+# Cada entrada mapeia: content-type esperado -> (extensão, função que
+# confirma se os bytes batem com aquele formato de imagem)
 IMAGE_TYPES = {
     "image/jpeg": (".jpg", lambda content: content.startswith(b"\xff\xd8\xff")),
     "image/png": (".png", lambda content: content.startswith(b"\x89PNG\r\n\x1a\n")),
@@ -23,7 +29,12 @@ IMAGE_TYPES = {
 
 @dataclass(frozen=True)
 class StagedAvatar:
-    """Arquivo movido temporariamente enquanto a alteração no banco é confirmada."""
+    """Arquivo movido temporariamente enquanto a alteração no banco é confirmada.
+
+    Guarda tanto o caminho original quanto o caminho temporário, para que
+    seja possível restaurar o arquivo de volta ao lugar original se algo
+    der errado depois (ex: falha ao salvar no banco de dados).
+    """
 
     original_path: Path
     staged_path: Path
@@ -39,10 +50,16 @@ class AvatarStorage:
         """Valida a imagem e retorna sua URL relativa após a escrita atômica."""
         extension, is_matching_image = IMAGE_TYPES.get(content_type, (None, None))
         if not extension or not is_matching_image(content):
+            # Rejeita se o tipo não é suportado OU se os bytes reais do
+            # arquivo não batem com o Content-Type que o cliente alegou
+            # (proteção contra upload de arquivo malicioso disfarçado de imagem)
             raise ValueError("O tipo da foto não corresponde ao arquivo enviado.")
         if len(content) > MAX_AVATAR_BYTES:
             raise ValueError("A foto deve ter no máximo 2 MiB.")
 
+        # Nome de arquivo aleatório (UUID) evita: colisão de nomes, um
+        # usuário "adivinhar" o nome do arquivo de outro, e problemas com
+        # caracteres especiais que o nome original pudesse ter
         filename = f"{uuid4()}{extension}"
         self.upload_directory.mkdir(parents=True, exist_ok=True)
         self._write_atomically(self.upload_directory / filename, content)
@@ -54,16 +71,22 @@ class AvatarStorage:
         if target is None:
             return
 
-        target.unlink(missing_ok=True)
+        target.unlink(missing_ok=True)  # missing_ok evita erro se o arquivo já não existir
 
     def stage_removal(self, avatar_url: str) -> StagedAvatar | None:
-        """Move o avatar para um nome interno antes de uma mudança no banco."""
+        """Move o avatar para um nome interno antes de uma mudança no banco.
+
+        Em vez de apagar o arquivo antigo direto, ele é RENOMEADO para um
+        nome "escondido" (prefixo "."). Isso implementa um padrão de
+        "transação": se a atualização no banco falhar depois, dá pra
+        restaurar o arquivo original (ver o método restore).
+        """
         target = self._local_path(avatar_url)
         if target is None or not target.exists():
             return None
 
         staged_path = target.with_name(f".removing-{uuid4()}{target.suffix}")
-        os.replace(target, staged_path)
+        os.replace(target, staged_path) # rename atômico no sistema de arquivos
         return StagedAvatar(original_path=target, staged_path=staged_path)
 
     @staticmethod
@@ -81,6 +104,9 @@ class AvatarStorage:
         try:
             staged_avatar.staged_path.unlink(missing_ok=True)
         except OSError:
+            # Falha ao apagar o arquivo temporário não deve quebrar a
+            # operação principal (o banco já foi atualizado com sucesso);
+            # na pior hipótese, sobra um arquivo órfão no disco
             pass
 
     def _local_filename(self, avatar_url: str) -> str | None:
@@ -89,6 +115,9 @@ class AvatarStorage:
             return None
 
         filename = avatar_url.removeprefix(AVATAR_URL_PREFIX)
+        # Path(filename).name != filename detecta tentativas de "path
+        # traversal" (ex: filename = "../../etc/passwd"), pois nesse caso
+        # o ".name" retornaria só "passwd", diferente do filename completo
         if not filename or Path(filename).name != filename:
             return None
         return filename
@@ -99,26 +128,39 @@ class AvatarStorage:
         if filename is None:
             return None
 
+        # .resolve() converte para caminho absoluto, eliminando "..", links
+        # simbólicos etc. Depois confirma que o resultado realmente está
+        # DENTRO do diretório de uploads — uma segunda camada de proteção
+        # contra escrever/apagar arquivos fora da pasta permitida
         target = (self.upload_directory / filename).resolve()
         root = self.upload_directory.resolve()
         return target if target.parent == root else None
 
     def _write_atomically(self, target: Path, content: bytes) -> None:
-        """Grava em arquivo temporário e só então o publica no destino final."""
+        """Grava em arquivo temporário e só então o publica no destino final.
+
+        Escrever direto no arquivo final poderia deixar um arquivo
+        corrompido/incompleto visível caso o processo caia no meio da
+        escrita. Por isso: escreve tudo num arquivo temporário primeiro,
+        garante que foi gravado em disco (fsync) e só então RENOMEIA
+        (operação atômica no sistema de arquivos) para o nome final.
+        """
         temporary_path = None
         try:
             with tempfile.NamedTemporaryFile(
                 mode="wb",
-                dir=self.upload_directory,
+                dir=self.upload_directory,  # mesmo diretório do destino: renomear entre diretórios diferentes não seria atômico
                 prefix=".avatar-",
                 delete=False,
             ) as temporary_file:
                 temporary_path = Path(temporary_file.name)
                 temporary_file.write(content)
                 temporary_file.flush()
-                os.fsync(temporary_file.fileno())
+                os.fsync(temporary_file.fileno())   # força a escrita física no disco
 
             os.replace(temporary_path, target)
         finally:
+            # Se algo falhar antes do os.replace, garante que o arquivo
+            # temporário não fica esquecido ocupando espaço em disco
             if temporary_path is not None:
                 temporary_path.unlink(missing_ok=True)

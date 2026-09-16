@@ -2,12 +2,15 @@
 
 from datetime import datetime, timedelta, timezone
 
+# Todos os status possíveis que um filme pode ter na lista de um usuário
 STATUSES = ("WATCHING", "WATCHED", "PLAN_TO_WATCH", "DROPPED")
 RECENTLY_WATCHED_WINDOW_DAYS = 7
 
 
 def row_to_dict(row):
     """Converte um objeto sqlite3.Row em dicionário Python padrão."""
+    # sqlite3.Row não é serializável em JSON diretamente; dict() o converte
+    # em algo que o módulo `json` consegue transformar em texto
     return dict(row) if row else None
 
 
@@ -46,6 +49,8 @@ class ProfileService:
         recently_watched_since, recently_watched_until = recently_watched_window()
 
         # Agrupamentos de filmes
+        # "favoritos" e "assistidos recentemente" são seções especiais,
+        # limitadas a 6 itens (para não sobrecarregar a tela de perfil)
         sections = {
             "favorites": self.user_movies.list_for_profile(user_id, favorite=True, limit=6),
             "recently_watched": self.user_movies.list_for_profile(
@@ -57,9 +62,14 @@ class ProfileService:
             ),
         }
 
+        # Além disso, monta uma seção completa (sem limite) para CADA
+        # status possível (assistindo, assistido, pretende assistir, abandonado)
         for status in STATUSES:
             sections[status.lower()] = self.user_movies.list_for_profile(user_id, status=status)
 
+        # Se o usuário ainda não tem nenhum filme, statistics() pode
+        # retornar uma linha com valores None — nesse caso, usa um valor
+        # padrão "zerado" em vez de deixar o campo ausente na resposta
         data["stats"] = row_to_dict(self.user_movies.statistics(user_id)) or {
             "watched_count": 0,
             "average_rating": None,
@@ -71,5 +81,8 @@ class ProfileService:
         }
 
         # Remove dados sensíveis
+        # (diferente de sanitize_user, aqui é feito na mão porque este
+        # dicionário já foi enriquecido com "stats" e "sections", então
+        # sanitize_user não serviria diretamente)
         data.pop("password_hash", None)
         return data
