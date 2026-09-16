@@ -9,13 +9,19 @@ from server.http.response_json import json_response
 
 
 class ResponseHandler:
-    """Handler mínimo para observar uma resposta HTTP gerada."""
+    """Handler mínimo para observar uma resposta HTTP gerada.
+
+    Este é um "test double" (dublê de teste): simula só o comportamento
+    mínimo do handler HTTP real (SimpleHTTPRequestHandler) que a função
+    json_response precisa usar, sem precisar abrir um socket/servidor de
+    verdade para testar — deixa o teste rápido e isolado.
+    """
 
     def __init__(self):
         self.status = None
         self.headers = []
         self.ended = False
-        self.wfile = io.BytesIO()
+        self.wfile = io.BytesIO()    # simula o "arquivo" de saída onde a resposta é escrita
 
     def send_response(self, status):
         self.status = status
@@ -35,8 +41,8 @@ class ResponseJsonTests(unittest.TestCase):
         json_response(
             handler,
             HTTPStatus.CREATED,
-            {"message": "Olá"},
-            {"X-Request-Id": "request-123"},
+            {"message": "Olá"},     # inclui acento de propósito, para testar UTF-8
+            {"X-Request-Id": "request-123"},    # header extra customizado
         )
 
         headers = dict(handler.headers)
@@ -44,10 +50,14 @@ class ResponseJsonTests(unittest.TestCase):
         self.assertTrue(handler.ended)
         self.assertEqual(headers["Content-Type"], "application/json; charset=utf-8")
         self.assertEqual(headers["X-Request-Id"], "request-123")
+        # Confirma que o Content-Length declarado bate exatamente com o
+        # tamanho real dos bytes escritos (evita resposta truncada/cortada)
         self.assertEqual(
             int(headers["Content-Length"]),
             len(handler.wfile.getvalue()),
         )
+        # Confirma que o corpo é um JSON válido e com o acento preservado
+        # corretamente (prova que ensure_ascii=False funcionou)
         self.assertEqual(
             json.loads(handler.wfile.getvalue().decode("utf-8")),
             {"message": "Olá"},

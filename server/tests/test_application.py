@@ -18,6 +18,9 @@ class ApplicationTests(unittest.TestCase):
     """Garante que o roteador receba dependências já compostas."""
 
     def setUp(self):
+        # Cria um arquivo de banco de dados temporário e real (não é um
+        # banco "em memória"), para o teste ser o mais próximo possível do
+        # comportamento em produção
         database_file = tempfile.NamedTemporaryFile(suffix=".sqlite3", delete=False)
         database_file.close()
         self.database_path = database_file.name
@@ -28,10 +31,14 @@ class ApplicationTests(unittest.TestCase):
     def tearDown(self):
         self.connection.close()
         self.temp_directory.cleanup()
-        os.unlink(self.database_path)
+        os.unlink(self.database_path)   # apaga o arquivo .sqlite3 temporário
 
     def test_create_router_composes_domain_controllers(self):
         """Falha se o Router voltar a construir repositories, services ou controllers."""
+        # Este teste é uma proteção "estrutural": garante que create_router
+        # continua sendo o único lugar que monta o grafo de dependências
+        # (ver application.py), e que o Router resultante já vem com todos
+        # os controllers certos prontos
         router = create_router(
             self.connection,
             avatar_upload_directory=Path(self.temp_directory.name) / "avatars",

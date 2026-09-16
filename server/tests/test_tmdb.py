@@ -28,6 +28,7 @@ class TmdbServiceTests(unittest.TestCase):
     """Testes de validação e normalização do serviço TMDB."""
 
     def test_search_normalizes_catalog_result(self):
+        # Simula uma resposta "crua" real da API da TMDB
         """Valida que a resposta da TMDB é normalizada com os tipos e campos esperados."""
         sample_response = {
             "results": [
@@ -43,6 +44,8 @@ class TmdbServiceTests(unittest.TestCase):
             ]
         }
 
+        # Mock() cria um "opener" falso que, quando chamado, devolve a
+        # resposta simulada — sem acessar a internet de verdade
         mock_opener = Mock(return_value=MockHttpResponse(sample_response))
         service = TmdbService("dummy_secret_token", opener=mock_opener)
 
@@ -50,12 +53,16 @@ class TmdbServiceTests(unittest.TestCase):
         self.assertEqual(len(results), 1)
 
         first = results[0]
+        # Confirma que normalize_movie() transformou os campos corretamente:
+        # "id" virou "tmdb_id", e "release_date" virou só o ano (int)
         self.assertEqual(first["tmdb_id"], 550)
         self.assertEqual(first["title"], "Fight Club")
         self.assertEqual(first["release_year"], 1999)
         self.assertEqual(first["poster_path"], "/poster.jpg")
 
         # Verifica cabeçalho de autenticação enviado
+        # mock_opener.call_args[0][0] = o primeiro argumento posicional da
+        # última chamada feita ao mock_opener (ou seja, o objeto Request)
         request_obj = mock_opener.call_args[0][0]
         self.assertIn("Bearer dummy_secret_token", request_obj.headers["Authorization"])
 
@@ -64,19 +71,23 @@ class TmdbServiceTests(unittest.TestCase):
         service = TmdbService("dummy_secret", opener=Mock())
 
         with self.assertRaises(ValueError):
-            service.search("   ")
+            service.search("   ")   # só espaços, considerado busca vazia
 
         with self.assertRaises(ValueError):
-            service.details("identificador_invalido")
+            service.details("identificador_invalido")   # não é um número
 
         with self.assertRaises(ValueError):
-            service.details(-1)
+            service.details(-1)  # número negativo não é um ID válido
 
     def test_hides_external_error_details(self):
         """Garante que exceções de rede externas não vazam tokens ou dados crus."""
+        # side_effect faz o mock "explodir" com essa exceção quando chamado,
+        # simulando uma falha real de conexão com a internet
         mock_opener = Mock(side_effect=URLError("Falha de conexão com a rede"))
         service = TmdbService("token-privado", opener=mock_opener)
 
+        # A mensagem final ao usuário deve ser genérica, sem expor o motivo
+        # técnico exato ("Falha de conexão com a rede") nem o token privado
         with self.assertRaisesRegex(ValueError, "Não foi possível consultar o catálogo"):
             service.popular()
 

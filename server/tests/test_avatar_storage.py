@@ -16,28 +16,38 @@ class AvatarStorageTests(unittest.TestCase):
     """Garante persistência local somente para imagens verificadas."""
 
     def setUp(self):
+        # setUp roda ANTES de cada teste desta classe: cria um diretório
+        # temporário isolado, então os testes nunca escrevem no disco real
+        # do projeto nem interferem uns nos outros
         self.temp_directory = tempfile.TemporaryDirectory()
         self.upload_directory = Path(self.temp_directory.name) / "avatars"
         self.storage = AvatarStorage(self.upload_directory)
 
     def tearDown(self):
+        # tearDown roda DEPOIS de cada teste: apaga o diretório temporário
         self.temp_directory.cleanup()
 
     def test_save_returns_a_local_png_url_and_persists_the_verified_bytes(self):
         """Falha se um PNG válido não for gravado sob o diretório de avatar configurado."""
         avatar_url = self.storage.save(PNG_BYTES, "image/png")
 
+        # Confirma o formato da URL gerada (prefixo + UUID + extensão)
         self.assertRegex(avatar_url, r"^/uploads/avatars/[0-9a-f-]+\.png$")
         filename = avatar_url.rsplit("/", 1)[1]
+        # Confirma que o arquivo foi realmente escrito no disco com os
+        # bytes corretos (não só que a URL "parece certa")
         self.assertEqual((self.upload_directory / filename).read_bytes(), PNG_BYTES)
 
     def test_save_accepts_each_supported_image_signature(self):
         """Falha se JPEG ou WebP válidos forem rejeitados pelo verificador binário."""
+        # Envia bytes de PNG mas alega ser "image/jpeg": deve ser recusado
         cases = (
             (JPEG_BYTES, "image/jpeg", ".jpg"),
             (WEBP_BYTES, "image/webp", ".webp"),
         )
 
+        # Confirma que a tentativa recusada nem chegou a criar o diretório
+        # de uploads (nada é escrito em disco em caso de erro)
         for content, content_type, extension in cases:
             with self.subTest(content_type=content_type):
                 avatar_url = self.storage.save(content, content_type)
@@ -45,6 +55,8 @@ class AvatarStorageTests(unittest.TestCase):
 
     def test_save_rejects_a_declared_type_that_does_not_match_the_signature(self):
         """Falha se o tipo informado pelo navegador puder divergir dos bytes enviados."""
+        # Monta um PNG válido (passa na checagem de assinatura) mas maior
+        # que o limite de 2 MiB, para testar exclusivamente a checagem de tamanho
         with self.assertRaisesRegex(ValueError, "tipo da foto"):
             self.storage.save(PNG_BYTES, "image/jpeg")
 
@@ -65,6 +77,8 @@ class AvatarStorageTests(unittest.TestCase):
         sentinel.parent.mkdir(parents=True, exist_ok=True)
         sentinel.write_text("preserve")
 
+        # Tenta remover uma URL externa (de outro domínio) e uma tentativa
+        # de "path traversal" (../) — nenhuma das duas deve apagar o arquivo sentinela
         self.storage.remove("https://images.example/avatar.png")
         self.storage.remove("/uploads/avatars/../sentinel.txt")
 
@@ -76,6 +90,7 @@ class AvatarStorageTests(unittest.TestCase):
 
         self.storage.remove(avatar_url)
 
+        # O diretório deve ficar vazio depois da remoção (nenhum arquivo sobrando)
         self.assertEqual(list(self.upload_directory.iterdir()), [])
 
     def test_stage_removal_restores_the_avatar_after_a_failed_database_operation(self):
@@ -83,9 +98,13 @@ class AvatarStorageTests(unittest.TestCase):
         avatar_url = self.storage.save(PNG_BYTES, "image/png")
         filename = avatar_url.rsplit("/", 1)[1]
 
+        # Simula o primeiro passo de uma troca de avatar: o arquivo antigo
+        # é "estagiado" (renomeado, mas não apagado de verdade)
         staged_avatar = self.storage.stage_removal(avatar_url)
         self.assertFalse((self.upload_directory / filename).exists())
 
+        # Simula uma falha depois (ex: erro ao salvar no banco): o arquivo
+        # deve voltar exatamente para onde estava, com o conteúdo intacto
         self.storage.restore(staged_avatar)
 
         self.assertEqual((self.upload_directory / filename).read_bytes(), PNG_BYTES)
@@ -101,6 +120,8 @@ class AvatarStorageInitializationTests(unittest.TestCase):
 
             AvatarStorage(upload_directory)
 
+            # O construtor sozinho não deve criar a pasta — ela só é criada
+            # de fato quando save() é chamado pela primeira vez (ver avatar_storage.py)
             self.assertFalse(upload_directory.exists())
 
 

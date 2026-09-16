@@ -20,6 +20,9 @@ class EnvironmentLoaderTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
+            # patch.dict(..., clear=True) substitui os.environ inteiro
+            # temporariamente por um ambiente controlado, e restaura o
+            # ambiente real automaticamente ao sair do "with"
             with patch.dict(
                 os.environ,
                 {"TMDB_BEARER_TOKEN": "token-do-processo"},
@@ -27,6 +30,9 @@ class EnvironmentLoaderTests(unittest.TestCase):
             ):
                 load_environment(env_file)
 
+
+                # Confirma a regra "processo tem prioridade sobre .env
+                # quando já não está vazio" (ver environment.py)
                 self.assertEqual(
                     os.environ["TMDB_BEARER_TOKEN"],
                     "token-do-processo",
@@ -37,7 +43,7 @@ class EnvironmentLoaderTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             env_file = Path(temp_dir) / ".env"
             env_file.write_text(
-                "TMDB_BEARER_TOKEN=token-do-arquivo\n",
+                "TMDB_BEARER_TOKEN=token-do-arquivo\n",     # variável existe mas está vazia
                 encoding="utf-8",
             )
 
@@ -48,6 +54,7 @@ class EnvironmentLoaderTests(unittest.TestCase):
             ):
                 load_environment(env_file)
 
+                # Confirma que o .env "preenche" a variável vazia
                 self.assertEqual(
                     os.environ["TMDB_BEARER_TOKEN"],
                     "token-do-arquivo",
@@ -65,12 +72,16 @@ class EnvironmentLoaderTests(unittest.TestCase):
             with patch.dict(os.environ, {}, clear=True):
                 load_environment(env_file)
 
+                 # Confirma que "# porta local" foi descartado e sobrou só "8123"
                 self.assertEqual(os.environ["PORT"], "8123")
 
     def test_load_environment_publishes_exported_token_from_env_file(self):
         """Falha se o token do .env não chegar ao ambiente do processo."""
         with tempfile.TemporaryDirectory() as temp_dir:
             env_file = Path(temp_dir) / ".env"
+            # "\ufeff" é o caractere BOM (testa a remoção automática via
+            # "utf-8-sig"); "export\t" testa o prefixo export com tab em vez
+            # de espaço; aspas testam a extração do valor entre aspas
             env_file.write_text(
                 '\ufeffexport\tTMDB_BEARER_TOKEN="token-do-arquivo"\n',
                 encoding="utf-8",

@@ -18,20 +18,29 @@ from server.database.connection import initialize_database
 
 @contextmanager
 def running_server(server):
+    """Sobe o servidor real numa thread separada, em segundo plano, para os
+    testes fazerem requisições HTTP de verdade contra ele."""
+    # daemon=True garante que essa thread não impeça o processo de teste de
+    # encerrar, mesmo se algo der errado e o shutdown não for chamado
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
+        # devolve a PORTA escolhida (porta 0 = o sistema operacional escolhe
+        # uma porta livre automaticamente), para o teste montar a URL certa
         yield server.server_address[1]
     finally:
         server.shutdown()
         server.server_close()
-        thread.join(timeout=2)
+        thread.join(timeout=2)      # espera a thread terminar, no máximo 2s
 
 
 class ServerBootstrapTests(unittest.TestCase):
     def test_main_reports_successful_env_load(self):
         """Falha se a inicialização não confirmar a leitura do arquivo .env."""
         class InterruptingServer:
+            """Servidor falso que já "encerra" a si mesmo imediatamente,
+            simulando um Ctrl+C, para o teste não ficar preso rodando
+            serve_forever() de verdade."""
             server_address = ("127.0.0.1", 8000)
 
             def serve_forever(self):
@@ -47,11 +56,14 @@ class ServerBootstrapTests(unittest.TestCase):
             env_file_loaded=True,
         )
 
+        # Substitui (patch) três pontos da função main() para isolar
+        # exatamente o que está sendo testado (a mensagem impressa),
+        # sem depender de arquivo .env real nem de banco de dados real
         with (
             patch.object(server_main.ServerConfig, "load", return_value=config),
             patch.object(server_main, "initialize_database"),
             patch.object(server_main, "create_server", return_value=InterruptingServer()),
-            redirect_stdout(output),
+            redirect_stdout(output),     # captura tudo que seria print()ado no console
         ):
             server_main.main()
 
@@ -80,9 +92,12 @@ class ServerBootstrapTests(unittest.TestCase):
                 tmdb_bearer_token="token-da-configuracao",
             )
 
+            # Troca a classe TmdbService real (usada dentro de
+            # application.py) pela versão falsa, só durante este teste
             with patch("server.application.TmdbService", FakeTmdbService):
                 server = server_main.create_server(config, database_path=database_path)
                 with running_server(server) as port:
+                    # Faz uma requisição HTTP real contra o servidor de teste
                     with urlopen(
                         f"http://127.0.0.1:{port}/api/movies/search?q=teste",
                         timeout=2,
@@ -90,6 +105,8 @@ class ServerBootstrapTests(unittest.TestCase):
                         body = json.loads(response.read().decode("utf-8"))
 
         self.assertEqual(body, {"results": []})
+        # Confirma que o token configurado (config.tmdb_bearer_token)
+        # realmente "flui" até chegar na construção do TmdbService
         self.assertEqual(FakeTmdbService.received_token, "token-da-configuracao")
 
     def test_create_server_serves_public_index(self):
@@ -106,6 +123,7 @@ class ServerBootstrapTests(unittest.TestCase):
                 body = response.read().decode("utf-8")
 
             self.assertEqual(response.status, 200)
+            # Confirma que "/" devolve o index.html real (contém a tag <title>)
             self.assertIn("<title>Cinefolio", body)
 
     def test_create_server_dispatches_api_requests_as_json(self):
@@ -119,6 +137,8 @@ class ServerBootstrapTests(unittest.TestCase):
             )
 
             with running_server(server) as port:
+                # urlopen lança HTTPError para respostas com status de erro
+                # (como 404) em vez de simplesmente devolvê-las
                 with self.assertRaises(HTTPError) as raised:
                     urlopen(f"http://127.0.0.1:{port}/api/unknown", timeout=2)
 
@@ -126,6 +146,8 @@ class ServerBootstrapTests(unittest.TestCase):
                 body = json.loads(response.read().decode("utf-8"))
 
         self.assertEqual(response.code, 404)
+        # Confirma que o 404 de uma rota de API é JSON (e não uma página
+        # HTML de "não encontrado" genérica do SimpleHTTPRequestHandler)
         self.assertEqual(
             response.headers.get_content_type(),
             "application/json",
@@ -141,6 +163,9 @@ class ServerBootstrapTests(unittest.TestCase):
                 avatar_upload_directory=upload_directory,
             )
 
+            # Confirma que o diretório de upload customizado realmente
+            # chega até a "fábrica" do handler (functools.partial em main.py),
+            # sem precisar subir o servidor para verificar isso
             self.assertEqual(server.RequestHandlerClass.keywords["avatar_upload_directory"], upload_directory)
             server.server_close()
 

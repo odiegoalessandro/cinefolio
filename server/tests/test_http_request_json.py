@@ -11,7 +11,7 @@ class RequestHandler:
 
     def __init__(self, body: bytes):
         self.headers = {"Content-Length": str(len(body))}
-        self.rfile = io.BytesIO(body)
+        self.rfile = io.BytesIO(body)   # simula o "arquivo" de entrada com o corpo da requisição
 
 
 class RequestJsonTests(unittest.TestCase):
@@ -23,9 +23,11 @@ class RequestJsonTests(unittest.TestCase):
 
     def test_read_json_rejects_malformed_or_non_object_body(self):
         """Falha se bodies JSON inválidos deixarem de retornar erro de validação."""
+        # subTest permite testar vários casos numa mesma função, e se um
+        # deles falhar, o relatório do teste ainda mostra qual caso especificamente quebrou
         cases = (
-            (b"[]", "O corpo da requisição deve ser um objeto JSON."),
-            (b"{invalido", "Formato JSON inválido."),
+            (b"[]", "O corpo da requisição deve ser um objeto JSON."),  # array não é aceito
+            (b"{invalido", "Formato JSON inválido."),   # sintaxe JSON quebrada
         )
 
         for body, message in cases:

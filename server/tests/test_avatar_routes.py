@@ -38,7 +38,13 @@ def multipart_body(boundary: str, parts: list[tuple[str, str | None, str | None,
 
 @dataclass(frozen=True)
 class HttpResponse:
-    """Resposta HTTP já consumida, sem manter sockets abertos durante o teste."""
+    """Resposta HTTP já consumida, sem manter sockets abertos durante o teste.
+
+    urlopen devolve um objeto "ao vivo" ligado à conexão de rede — se ele
+    ficasse aberto até o final do teste, poderia causar vazamento de
+    recursos. Por isso a resposta é lida e guardada numa dataclass simples
+    (status/headers/body) logo depois de receber, e a conexão original é fechada.
+    """
 
     status: int
     headers: dict[str, str]
@@ -46,7 +52,13 @@ class HttpResponse:
 
 
 class AvatarRouteTests(unittest.TestCase):
-    """Garante que o upload use somente a identidade da sessão atual."""
+    """Garante que o upload use somente a identidade da sessão atual.
+
+    Este arquivo é um teste de INTEGRAÇÃO: em vez de chamar as classes
+    Python diretamente, ele sobe um servidor HTTP real (numa thread) e faz
+    requisições de verdade contra ele — testando o sistema "de fora para
+    dentro", como um cliente real faria.
+    """
 
     def setUp(self):
         self.temp_directory = tempfile.TemporaryDirectory()
@@ -66,6 +78,9 @@ class AvatarRouteTests(unittest.TestCase):
         self.thread.start()
         self.base_url = f"http://127.0.0.1:{self.server.server_address[1]}"
 
+        # Cria dois usuários de teste: "owner" (dono das operações testadas)
+        # e "other" (uma segunda conta, usada para confirmar que as ações
+        # de um usuário NUNCA afetam o outro)
         self.owner = self._register("owner")
         self.other = self._register("other")
         self.owner_cookie = self._login("owner")
@@ -80,13 +95,18 @@ class AvatarRouteTests(unittest.TestCase):
 
     def test_upload_requires_an_authenticated_session(self):
         """Falha se qualquer visitante puder criar um arquivo de avatar."""
+        # cookie=None simula um visitante não logado tentando fazer upload
         response = self._put_avatar(cookie=None, parts=[self._avatar_part()])
 
         self.assertEqual(response.status, 401)
+        # Confirma que NENHUM arquivo foi criado no disco, mesmo tendo
+        # enviado uma imagem válida — a rejeição acontece ANTES da escrita
         self.assertEqual(list(self.upload_directory.glob("*")), [])
 
     def test_upload_rejects_an_identity_part_and_preserves_the_other_user(self):
         """Falha se o multipart puder escolher qual usuário terá a foto alterada."""
+        # Tenta "forjar" o dono do upload enviando um campo extra "user_id"
+        # apontando para OUTRO usuário — a identidade real deve vir só do cookie
         response = self._put_avatar(
             cookie=self.owner_cookie,
             parts=[
@@ -113,7 +133,9 @@ class AvatarRouteTests(unittest.TestCase):
         self.assertEqual(removed.status, 200)
         self.assertEqual(self._json(removed)["user"]["avatar_url"], "")
         self.assertEqual(self.users.get_by_id(self.owner["id"])["avatar_url"], "")
+        # Confirma que remover a foto do "owner" não afetou o "other" de forma alguma
         self.assertEqual(self.users.get_by_id(self.other["id"])["avatar_url"], "")
+        # Confirma que o arquivo físico da foto do owner foi realmente apagado do disco
         self.assertFalse((self.upload_directory / avatar_url.rsplit("/", 1)[1]).exists())
 
     def test_uploaded_avatar_is_served_as_a_static_file(self):
@@ -121,6 +143,8 @@ class AvatarRouteTests(unittest.TestCase):
         uploaded = self._put_avatar(self.owner_cookie, [self._avatar_part()])
         avatar_url = self._json(uploaded)["user"]["avatar_url"]
 
+        # Confirma que a URL retornada pela API realmente funciona como
+        # endereço público de imagem (sem precisar de autenticação para ver)
         with urlopen(f"{self.base_url}{avatar_url}", timeout=2) as response:
             body = response.read()
 
@@ -131,6 +155,9 @@ class AvatarRouteTests(unittest.TestCase):
         """Falha se a URL do diretório expuser uma lista de arquivos enviados por usuários."""
         self._put_avatar(self.owner_cookie, [self._avatar_part()])
 
+        # Tenta acessar a PASTA de uploads diretamente (sem nome de
+        # arquivo): não deve listar o conteúdo do diretório (o que
+        # exporia os avatares de todos os usuários)
         with self.assertRaises(HTTPError) as raised:
             urlopen(f"{self.base_url}/uploads/avatars/", timeout=2)
 
@@ -141,6 +168,8 @@ class AvatarRouteTests(unittest.TestCase):
         victim_upload = self._put_avatar(self.other_cookie, [self._avatar_part()])
         victim_avatar_url = self._json(victim_upload)["user"]["avatar_url"]
 
+        # Tenta usar o endpoint de atualização de PERFIL (texto) para se
+        # apropriar da URL de avatar de outro usuário
         response = self._request(
             "PUT",
             "/api/profile",
@@ -157,6 +186,7 @@ class AvatarRouteTests(unittest.TestCase):
         )
 
         self.assertEqual(response.status, 400)
+        # A foto da vítima continua intacta, tanto no disco quanto no banco
         self.assertTrue(
             (self.upload_directory / victim_avatar_url.rsplit("/", 1)[1]).exists()
         )
@@ -169,6 +199,9 @@ class AvatarRouteTests(unittest.TestCase):
         """Falha se uma referência legada compartilhada permitir apagar a foto de outra conta."""
         victim_upload = self._put_avatar(self.other_cookie, [self._avatar_part()])
         victim_avatar_url = self._json(victim_upload)["user"]["avatar_url"]
+        # Simula um cenário "legado"/anômalo: o owner passa a ter a MESMA
+        # URL de avatar que a vítima (algo que não deveria acontecer no
+        # fluxo normal, mas testa a defesa da camada de exclusividade)
         self.users.update_avatar_url(self.owner["id"], victim_avatar_url)
 
         response = self._request(
@@ -178,6 +211,9 @@ class AvatarRouteTests(unittest.TestCase):
         )
 
         self.assertEqual(response.status, 200)
+        # Mesmo removendo o avatar do owner, o arquivo físico NÃO pode ser
+        # apagado, porque ainda está associado à vítima também
+        # (ver avatar_url_is_exclusive_to_user em user_repository.py)
         self.assertTrue(
             (self.upload_directory / victim_avatar_url.rsplit("/", 1)[1]).exists()
         )
@@ -210,6 +246,10 @@ class AvatarRouteTests(unittest.TestCase):
             body=json.dumps({"username": username, "password": "senhasegura123"}).encode(),
             headers={"Content-Type": "application/json"},
         )
+
+        # O header Set-Cookie pode vir com atributos extras (ex: "; HttpOnly; ...");
+        # aqui só o par "session=valor" é extraído, que é o que precisa ser
+        # reenviado no header Cookie das próximas requisições
         return response.headers["Set-Cookie"].split(";", 1)[0]
 
     def _put_avatar(self, cookie: str | None, parts) -> object:
@@ -251,6 +291,10 @@ class AvatarRouteTests(unittest.TestCase):
             with urlopen(request, timeout=2) as response:
                 return self._read_response(response)
         except HTTPError as error:
+            # urlopen lança exceção para respostas de erro (4xx/5xx) em vez
+            # de devolvê-las normalmente; aqui a exceção é capturada e
+            # tratada como uma resposta comum, para os testes conseguirem
+            # inspecionar o status/corpo do erro
             with error:
                 return self._read_response(error)
 

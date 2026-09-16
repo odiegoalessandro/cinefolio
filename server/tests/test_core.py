@@ -16,7 +16,12 @@ from server.services.profile_service import ProfileService
 
 
 class DatabaseTestCase(unittest.TestCase):
-    """Caso base de teste com banco de dados temporário isolado por teste."""
+    """Caso base de teste com banco de dados temporário isolado por teste.
+
+    Outras classes de teste nesse arquivo (AuthTestCase) herdam desta
+    classe para reaproveitar o mesmo setUp/tearDown (banco temporário),
+    sem precisar repetir esse código de preparação em cada uma.
+    """
 
     def setUp(self):
         self.temp_file = tempfile.NamedTemporaryFile(suffix=".sqlite3", delete=False)
@@ -31,6 +36,10 @@ class DatabaseTestCase(unittest.TestCase):
 
     def tearDown(self):
         self.connection.close()
+        # Remove as referências explicitamente e força o coletor de lixo
+        # (gc.collect()) antes de tentar apagar o arquivo: no Windows,
+        # um arquivo ainda "em uso" por uma conexão não fechada de verdade
+        # não pode ser apagado, então isso evita testes instáveis (flaky)
         del self.connection
         del self.users
         del self.movies
@@ -68,10 +77,13 @@ class DatabaseTestCase(unittest.TestCase):
         self.create_test_user("usuario_unico")
 
         # Tentativa de duplicar username
+        # (testa a constraint UNIQUE definida em schema.sql)
         with self.assertRaises(Exception):
             self.create_test_user("usuario_unico")
 
         # Tentativa de associar filme inexistente
+        # (testa se FOREIGN KEY realmente bloqueia um user_id/movie_id
+        # que não existem nas tabelas users/movies)
         with self.assertRaises(Exception):
             self.connection.execute(
                 """
@@ -101,6 +113,8 @@ class DatabaseTestCase(unittest.TestCase):
         self.assertEqual(len(saved_list), 1)
         self.assertEqual(saved_list[0]["title"], "Clube da Luta")
         self.assertEqual(saved_list[0]["rating"], 9.5)
+        # favorite é armazenado como inteiro (0/1) no SQLite, por isso
+        # a comparação é com "1" e não com "True"
         self.assertEqual(saved_list[0]["favorite"], 1)
 
         # Statistics
@@ -110,6 +124,8 @@ class DatabaseTestCase(unittest.TestCase):
         self.assertEqual(stats["review_count"], 1)
 
         # Delete
+        # A primeira remoção deve funcionar (retorna True); a segunda
+        # tentativa (já removido) deve retornar False, sem gerar um erro
         self.assertTrue(self.user_movies.remove(user["id"], movie["id"]))
         self.assertFalse(self.user_movies.remove(user["id"], movie["id"]))
 
@@ -118,6 +134,8 @@ class DatabaseTestCase(unittest.TestCase):
         user = self.create_test_user("cinefilo_2")
         movie = self.create_test_movie(102)
 
+        # O schema.sql define um CHECK restringindo os valores possíveis
+        # de "status"; este teste confirma que o banco realmente aplica essa regra
         with self.assertRaises(Exception):
             self.user_movies.upsert(
                 user_id=user["id"],
@@ -150,9 +168,13 @@ class DatabaseTestCase(unittest.TestCase):
         profile_data = profile_service.public_profile("marcos")
 
         self.assertIsNotNone(profile_data)
+        # Confirma que cada filme caiu na(s) seção(ões) certa(s): o filme 1
+        # está em "favorites" E "watched" ao mesmo tempo (não são exclusivas);
+        # o filme 2 só está em "watching"
         self.assertEqual(len(profile_data["sections"]["favorites"]), 1)
         self.assertEqual(len(profile_data["sections"]["watching"]), 1)
         self.assertEqual(len(profile_data["sections"]["watched"]), 1)
+        # Confirma que o campo sensível não vazou na resposta do perfil público
         self.assertNotIn("password_hash", profile_data)
 
     def test_recently_watched_limited_to_last_seven_days(self):
@@ -255,7 +277,10 @@ class AuthTestCase(DatabaseTestCase):
         first_hash = hash_password("minhasenhaforte")
         second_hash = hash_password("minhasenhaforte")
 
+        # Mesma senha, hashes DIFERENTES: prova que o salt aleatório está
+        # funcionando (ver auth_service.py)
         self.assertNotEqual(first_hash, second_hash)
+        # Mas os dois hashes devem validar a MESMA senha corretamente
         self.assertTrue(verify_password("minhasenhaforte", first_hash))
         self.assertTrue(verify_password("minhasenhaforte", second_hash))
         self.assertFalse(verify_password("senhaerrada", first_hash))
@@ -271,14 +296,17 @@ class AuthTestCase(DatabaseTestCase):
 
         self.assertEqual(user["username"], "lucas_cine")
 
+        # Login deve gerar um token válido (não vazio)
         logged_user, token = auth_service.login("lucas_cine", "senhasegura123")
         self.assertEqual(logged_user["id"], user["id"])
         self.assertTrue(bool(token))
 
+        # Esse token deve conseguir "achar" o usuário de volta (sessão ativa)
         active_user = auth_service.current_user(token)
         self.assertIsNotNone(active_user)
         self.assertEqual(active_user["id"], user["id"])
 
+        # Após logout, o MESMO token não deve mais funcionar (sessão invalidada)
         auth_service.logout(token)
         self.assertIsNone(auth_service.current_user(token))
 
@@ -300,16 +328,24 @@ class AuthTestCase(DatabaseTestCase):
 
 
 class RouterValidationTests(unittest.TestCase):
-    """Testes para as funções de validação de payload."""
+    """Testes para as funções de validação de payload.
+
+    Não herda de DatabaseTestCase porque estes testes validam só a lógica
+    pura de validação (sem tocar no banco de dados de verdade).
+    """
 
     def test_profile_payload_rejects_invalid_values(self):
         """Valida restrições do payload de atualização de perfil."""
+        # display_name vazio
         with self.assertRaises(ValueError):
             profile_payload({"display_name": "", "bio": ""})
 
+        # bio acima do limite de 500 caracteres
         with self.assertRaises(ValueError):
             profile_payload({"display_name": "Nome", "bio": "x" * 501})
 
+
+        # display_name com tipo errado (lista em vez de string)
         with self.assertRaises(ValueError):
             profile_payload({"display_name": ["Tipo", "Invalido"]})
 
@@ -323,13 +359,17 @@ class RouterValidationTests(unittest.TestCase):
             }
         )
 
+        # Confirma que validate_profile_payload nunca inclui "avatar_url"
+        # no resultado, mesmo que o payload de entrada não tenha pedido isso
         self.assertNotIn("avatar_url", validated)
 
     def test_movie_payload_requires_status_and_known_fields(self):
         """Valida restrições do payload de classificação de filme."""
+        # Sem o campo obrigatório "status"
         with self.assertRaises(ValueError):
             movie_profile_payload({"rating": 8})
 
+        # Campo desconhecido/não permitido
         with self.assertRaises(ValueError):
             movie_profile_payload({"status": "WATCHED", "campo_desconhecido": True})
 

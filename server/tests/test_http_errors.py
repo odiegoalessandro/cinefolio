@@ -29,6 +29,8 @@ class ErrorResponseHandler:
 class HttpErrorTests(unittest.TestCase):
     def test_write_exception_response_preserves_error_mapping(self):
         """Falha se uma exceção passar a responder com status ou payload incorreto."""
+        # Testa TODOS os tipos de exceção que write_exception_response
+        # sabe traduzir, confirmando o status HTTP e a mensagem de cada um
         cases = (
             (
                 ValueError("Dados inválidos."),
@@ -48,6 +50,8 @@ class HttpErrorTests(unittest.TestCase):
             (
                 RuntimeError("erro interno"),
                 HTTPStatus.INTERNAL_SERVER_ERROR,
+                # Note que a mensagem original "erro interno" NÃO aparece
+                # aqui: confirma que detalhes internos não vazam ao cliente
                 "Ocorreu um erro interno no servidor.",
             ),
         )
